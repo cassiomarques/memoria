@@ -190,6 +190,38 @@ func (s *NoteService) Delete(path string) error {
 	return nil
 }
 
+// DeleteFolder removes all notes in a folder from all stores.
+func (s *NoteService) DeleteFolder(folder string) (int, error) {
+	notes, err := s.files.ListAll()
+	if err != nil {
+		return 0, fmt.Errorf("listing notes: %w", err)
+	}
+
+	var deleted int
+	for _, n := range notes {
+		if n.Folder == folder || strings.HasPrefix(n.Folder, folder+"/") {
+			if err := s.files.Delete(n.Path); err != nil {
+				return deleted, fmt.Errorf("deleting %s: %w", n.Path, err)
+			}
+			if err := s.meta.DeleteNote(n.Path); err != nil {
+				return deleted, fmt.Errorf("deleting metadata for %s: %w", n.Path, err)
+			}
+			if s.search != nil {
+				_ = s.search.Remove(n.Path)
+			}
+			deleted++
+		}
+	}
+
+	if deleted > 0 && s.repo != nil {
+		if err := s.repo.CommitAndPush(fmt.Sprintf("delete folder %s (%d notes)", folder, deleted)); err != nil {
+			return deleted, fmt.Errorf("git commit: %w", err)
+		}
+	}
+
+	return deleted, nil
+}
+
 // Move renames/moves a note across all stores.
 func (s *NoteService) Move(oldPath, newPath string) error {
 	oldPath = ensureMD(oldPath)

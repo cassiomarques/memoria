@@ -23,6 +23,7 @@ type NoteItem struct {
 // treeNode represents a node in the folder tree (either a folder or a note).
 type treeNode struct {
 	name        string
+	fullPath    string // full folder path for folders (e.g., "Projects/CodeCoverage")
 	isFolder    bool
 	expanded    bool
 	depth       int
@@ -110,6 +111,38 @@ func (n NoteList) SelectedItem() *NoteItem {
 
 // Cursor returns the current cursor position in the visible tree.
 func (n NoteList) Cursor() int { return n.cursor }
+
+// SelectedIsFolder reports whether the cursor is on a folder node.
+func (n NoteList) SelectedIsFolder() bool {
+	if len(n.flatVisible) == 0 || n.cursor >= len(n.flatVisible) {
+		return false
+	}
+	return n.flatVisible[n.cursor].isFolder
+}
+
+// SelectedFolderPath returns the full path of the selected folder, or "" if not a folder.
+func (n NoteList) SelectedFolderPath() string {
+	if len(n.flatVisible) == 0 || n.cursor >= len(n.flatVisible) {
+		return ""
+	}
+	node := n.flatVisible[n.cursor]
+	if !node.isFolder {
+		return ""
+	}
+	return node.fullPath
+}
+
+// SelectedFolderNoteCount returns the number of notes under the selected folder.
+func (n NoteList) SelectedFolderNoteCount() int {
+	if len(n.flatVisible) == 0 || n.cursor >= len(n.flatVisible) {
+		return 0
+	}
+	node := n.flatVisible[n.cursor]
+	if !node.isFolder {
+		return 0
+	}
+	return node.countNotes()
+}
 
 // ItemCount returns the total number of notes (not including folder nodes).
 func (n NoteList) ItemCount() int { return len(n.items) }
@@ -390,6 +423,7 @@ func buildTree(items []NoteItem) []*treeNode {
 				if found == nil {
 					found = &treeNode{
 						name:     seg,
+						fullPath: strings.Join(segments[:depth+1], "/"),
 						isFolder: true,
 						expanded: true,
 						depth:    depth,

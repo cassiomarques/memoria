@@ -55,6 +55,11 @@ svc           *service.NoteService
 currentFolder string
 allTags       []string
 pendingClear  bool // schedule a message clear after setMessage
+
+// Delete confirmation state
+pendingDelete     bool
+pendingDeletePath string // note path or folder path
+pendingDeleteIsFolder bool
 }
 
 // NewApp creates a new App with all sub-components initialized (no service).
@@ -134,6 +139,19 @@ return a, nil
 case tea.KeyPressMsg:
 key := msg.String()
 
+// Handle delete confirmation
+if a.pendingDelete {
+if key == "y" || key == "Y" {
+	a.confirmDelete()
+} else {
+	a.statusBar.ClearMessage()
+}
+a.pendingDelete = false
+a.pendingDeletePath = ""
+a.pendingDeleteIsFolder = false
+return a, clearMessageCmd()
+}
+
 // Global quit keys (only when command bar is not active)
 if !a.commandBar.Active() {
 switch key {
@@ -207,6 +225,9 @@ return a, cmd
 return a, nil
 case "h":
 a.cmdHelp()
+return a, nil
+case "d":
+a.initiateDelete()
 return a, nil
 }
 } else {
@@ -297,6 +318,64 @@ if a.svc != nil {
 	a.preview.SetContent(sel.Title, fmt.Sprintf("# %s\n\n*No service configured*", sel.Title))
 }
 a.previewedPath = sel.Path
+}
+
+// initiateDelete starts the delete confirmation flow for the selected item.
+func (a *App) initiateDelete() {
+if a.svc == nil {
+	return
+}
+
+if a.noteList.SelectedIsFolder() {
+	folder := a.noteList.SelectedFolderPath()
+	count := a.noteList.SelectedFolderNoteCount()
+	if folder == "" {
+		return
+	}
+	a.pendingDelete = true
+	a.pendingDeletePath = folder
+	a.pendingDeleteIsFolder = true
+	a.setMessage(fmt.Sprintf("Delete folder '%s' and all %d notes? (y/N)", folder, count), true)
+} else {
+	sel := a.noteList.SelectedItem()
+	if sel == nil {
+		return
+	}
+	a.pendingDelete = true
+	a.pendingDeletePath = sel.Path
+	a.pendingDeleteIsFolder = false
+	a.setMessage(fmt.Sprintf("Delete '%s'? (y/N)", sel.Path), true)
+}
+}
+
+// confirmDelete executes the pending deletion.
+func (a *App) confirmDelete() {
+if a.svc == nil {
+	return
+}
+
+if a.pendingDeleteIsFolder {
+	count, err := a.svc.DeleteFolder(a.pendingDeletePath)
+	if err != nil {
+		a.setMessage("Delete failed: "+err.Error(), true)
+	} else {
+		a.setMessage(fmt.Sprintf("Deleted folder '%s' (%d notes)", a.pendingDeletePath, count), false)
+	}
+} else {
+	err := a.svc.Delete(a.pendingDeletePath)
+	if err != nil {
+		a.setMessage("Delete failed: "+err.Error(), true)
+	} else {
+		a.setMessage(fmt.Sprintf("Deleted: %s", a.pendingDeletePath), false)
+	}
+	// Clear preview if we deleted the previewed note
+	if a.previewedPath == a.pendingDeletePath {
+		a.preview.SetContent("", "")
+		a.previewedPath = ""
+	}
+}
+_ = a.refreshNoteList()
+a.refreshTags()
 }
 
 // updateFocusStyles sets the focused state on the preview pane.
@@ -818,6 +897,7 @@ helpContent := `# Remember — Commands
 | **Tab** | Switch focus / autocomplete |
 | **p** | Preview selected note |
 | **e** | Edit previewed note (when preview focused) |
+| **d** | Delete selected note or folder |
 | **j/k** | Navigate list |
 | **Enter** | Open selected note |
 | **h** | Show help |
