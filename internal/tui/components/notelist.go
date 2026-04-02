@@ -2,6 +2,7 @@ package components
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 
@@ -19,14 +20,38 @@ type NoteItem struct {
 	Modified time.Time
 }
 
-// NoteList is a scrollable, filterable list of notes with vim-style navigation.
+// treeNode represents a node in the folder tree (either a folder or a note).
+type treeNode struct {
+	name        string
+	isFolder    bool
+	expanded    bool
+	depth       int
+	noteItem    *NoteItem
+	children    []*treeNode
+	isLastChild bool
+}
+
+func (t *treeNode) countNotes() int {
+	if !t.isFolder {
+		return 1
+	}
+	count := 0
+	for _, c := range t.children {
+		count += c.countNotes()
+	}
+	return count
+}
+
+// NoteList is a scrollable tree view of notes organized by folder.
 type NoteList struct {
-	items  []NoteItem
-	cursor int
-	offset int // first visible item index
-	height int
-	width  int
-	styles theme.Styles
+	items       []NoteItem
+	tree        []*treeNode
+	flatVisible []*treeNode
+	cursor      int
+	offset      int
+	height      int
+	width       int
+	styles      theme.Styles
 
 	// gg detection: true after first 'g' press
 	pendingG bool
@@ -41,6 +66,9 @@ func NewNoteList() NoteList {
 
 func (n *NoteList) SetItems(items []NoteItem) {
 	n.items = items
+	n.tree = buildTree(n.items)
+	n.flatVisible = nil
+	n.rebuildFlatVisible()
 	n.cursor = 0
 	n.offset = 0
 }
@@ -50,21 +78,26 @@ func (n *NoteList) SetSize(width, height int) {
 	n.height = height
 }
 
-// SelectedItem returns the currently selected item, or nil if the list is empty.
+// SelectedItem returns the currently selected note, or nil if the list is
+// empty or a folder is selected.
 func (n NoteList) SelectedItem() *NoteItem {
-	if len(n.items) == 0 {
+	if len(n.flatVisible) == 0 || n.cursor >= len(n.flatVisible) {
 		return nil
 	}
-	return &n.items[n.cursor]
+	node := n.flatVisible[n.cursor]
+	if node.isFolder {
+		return nil
+	}
+	return node.noteItem
 }
 
-// Cursor returns the current cursor position.
+// Cursor returns the current cursor position in the visible tree.
 func (n NoteList) Cursor() int { return n.cursor }
 
-// ItemCount returns the number of items.
+// ItemCount returns the total number of notes (not including folder nodes).
 func (n NoteList) ItemCount() int { return len(n.items) }
 
-// ItemAt returns the item at the given index, or nil if out of range.
+// ItemAt returns the note at the given index in the flat note list, or nil if out of range.
 func (n NoteList) ItemAt(index int) *NoteItem {
 	if index < 0 || index >= len(n.items) {
 		return nil
@@ -103,13 +136,34 @@ func (n NoteList) Update(msg tea.Msg) (NoteList, tea.Cmd) {
 			n.pageDown()
 		case "ctrl+u":
 			n.pageUp()
+		case "enter":
+			n.toggleFolder()
 		}
 	}
 	return n, nil
 }
 
+func (n *NoteList) toggleFolder() {
+	if len(n.flatVisible) == 0 || n.cursor >= len(n.flatVisible) {
+		return
+	}
+	node := n.flatVisible[n.cursor]
+	if !node.isFolder {
+		return
+	}
+	node.expanded = !node.expanded
+	n.rebuildFlatVisible()
+	if n.cursor >= len(n.flatVisible) {
+		n.cursor = len(n.flatVisible) - 1
+	}
+	if n.cursor < 0 {
+		n.cursor = 0
+	}
+	n.ensureVisible()
+}
+
 func (n *NoteList) moveDown() {
-	if n.cursor < len(n.items)-1 {
+	if n.cursor < len(n.flatVisible)-1 {
 		n.cursor++
 		n.ensureVisible()
 	}
@@ -123,8 +177,8 @@ func (n *NoteList) moveUp() {
 }
 
 func (n *NoteList) moveToBottom() {
-	if len(n.items) > 0 {
-		n.cursor = len(n.items) - 1
+	if len(n.flatVisible) > 0 {
+		n.cursor = len(n.flatVisible) - 1
 		n.ensureVisible()
 	}
 }
@@ -132,8 +186,8 @@ func (n *NoteList) moveToBottom() {
 func (n *NoteList) pageDown() {
 	visible := n.visibleCount()
 	n.cursor += visible / 2
-	if n.cursor >= len(n.items) {
-		n.cursor = len(n.items) - 1
+	if n.cursor >= len(n.flatVisible) {
+		n.cursor = len(n.flatVisible) - 1
 	}
 	if n.cursor < 0 {
 		n.cursor = 0
@@ -150,8 +204,7 @@ func (n *NoteList) pageUp() {
 	n.ensureVisible()
 }
 
-// Each item takes 3 lines (title + metadata + blank separator)
-const linesPerItem = 3
+const linesPerItem = 1
 
 func (n *NoteList) visibleCount() int {
 	if n.height <= 0 {
@@ -174,6 +227,22 @@ func (n *NoteList) ensureVisible() {
 	}
 }
 
+func (n *NoteList) rebuildFlatVisible() {
+	n.flatVisible = n.flatVisible[:0]
+	for _, node := range n.tree {
+		n.collectVisible(node)
+	}
+}
+
+func (n *NoteList) collectVisible(node *treeNode) {
+	n.flatVisible = append(n.flatVisible, node)
+	if node.isFolder && node.expanded {
+		for _, child := range node.children {
+			n.collectVisible(child)
+		}
+	}
+}
+
 func (n NoteList) View() string {
 	if len(n.items) == 0 {
 		empty := lipgloss.NewStyle().
@@ -186,20 +255,20 @@ func (n NoteList) View() string {
 
 	visible := n.visibleCount()
 	end := n.offset + visible
-	if end > len(n.items) {
-		end = len(n.items)
+	if end > len(n.flatVisible) {
+		end = len(n.flatVisible)
 	}
 
 	var rows []string
 	for i := n.offset; i < end; i++ {
-		rows = append(rows, n.renderItem(i))
+		rows = append(rows, n.renderNode(i))
 	}
 
 	content := strings.Join(rows, "\n")
 
 	// Scroll indicators when the list extends beyond the visible area
 	canScrollUp := n.offset > 0
-	canScrollDown := end < len(n.items)
+	canScrollDown := end < len(n.flatVisible)
 	if canScrollUp || canScrollDown {
 		indicator := lipgloss.NewStyle().Foreground(theme.ColorOverlay1)
 		var parts []string
@@ -219,22 +288,42 @@ func (n NoteList) View() string {
 	return content
 }
 
-func (n NoteList) renderItem(index int) string {
-	item := n.items[index]
-	selected := index == n.cursor
+func (n NoteList) renderNode(visibleIndex int) string {
+	node := n.flatVisible[visibleIndex]
+	selected := visibleIndex == n.cursor
 
-	// Selection indicator
 	indicator := "  "
 	if selected {
 		indicator = lipgloss.NewStyle().Foreground(theme.ColorMauve).Bold(true).Render("▸ ")
 	}
 
-	// Humanize and truncate title
-	maxTitleW := n.width - 6 // account for indicator and padding
+	indent := strings.Repeat("  ", node.depth)
+
+	if node.isFolder {
+		count := node.countNotes()
+		name := fmt.Sprintf("📁 %s (%d)", node.name, count)
+
+		var styledName string
+		if selected {
+			styledName = n.styles.NoteItemSel.Render(name)
+		} else {
+			styledName = n.styles.FolderPath.Render(name)
+		}
+
+		line := indicator + indent + styledName
+		return lipgloss.NewStyle().Width(n.width).Render(line)
+	}
+
+	// Note rendering
+	displayTitle := node.name
+	overhead := 4 + 2*node.depth
+	if node.depth > 0 {
+		overhead += 4 // tree connector
+	}
+	maxTitleW := n.width - overhead
 	if maxTitleW < 10 {
 		maxTitleW = 10
 	}
-	displayTitle := humanizeTitle(item.Title)
 	if len(displayTitle) > maxTitleW {
 		displayTitle = displayTitle[:maxTitleW-1] + "…"
 	}
@@ -244,35 +333,116 @@ func (n NoteList) renderItem(index int) string {
 		titleStyle = n.styles.NoteItemSel
 	}
 
-	titleText := indicator + titleStyle.Render(displayTitle)
-	titleLine := lipgloss.NewStyle().Width(n.width).Render(titleText)
-
-	// Metadata line: folder, tags, date — with breathing room
-	var metaParts []string
-	if item.Folder != "" {
-		metaParts = append(metaParts, n.styles.FolderPath.Render("📁 "+item.Folder))
+	if node.depth > 0 {
+		connector := "├── "
+		if node.isLastChild {
+			connector = "└── "
+		}
+		connStyle := lipgloss.NewStyle().Foreground(theme.ColorOverlay0)
+		line := indicator + indent + connStyle.Render(connector) + titleStyle.Render(displayTitle)
+		return lipgloss.NewStyle().Width(n.width).Render(line)
 	}
-	for _, tag := range item.Tags {
-		metaParts = append(metaParts, n.styles.Tag.Render("#"+tag))
+
+	// Root-level note
+	line := indicator + titleStyle.Render(displayTitle)
+	return lipgloss.NewStyle().Width(n.width).Render(line)
+}
+
+// buildTree constructs a hierarchical tree from a flat list of NoteItems.
+func buildTree(items []NoteItem) []*treeNode {
+	if len(items) == 0 {
+		return nil
 	}
-	metaParts = append(metaParts, lipgloss.NewStyle().
-		Foreground(theme.ColorOverlay0).
-		Render(formatTime(item.Modified)))
 
-	meta := "    " + strings.Join(metaParts, "  ")
+	root := &treeNode{isFolder: true, expanded: true, children: make([]*treeNode, 0)}
 
-	// Blank line for breathing room between items
-	return titleLine + "\n" + meta + "\n"
+	for i := range items {
+		item := &items[i]
+		target := root
+
+		if item.Folder != "" {
+			segments := strings.Split(item.Folder, "/")
+			for depth, seg := range segments {
+				var found *treeNode
+				for _, child := range target.children {
+					if child.isFolder && child.name == seg {
+						found = child
+						break
+					}
+				}
+				if found == nil {
+					found = &treeNode{
+						name:     seg,
+						isFolder: true,
+						expanded: true,
+						depth:    depth,
+						children: make([]*treeNode, 0),
+					}
+					target.children = append(target.children, found)
+				}
+				target = found
+			}
+		}
+
+		note := &treeNode{
+			name:     humanizeTitle(item.Title),
+			isFolder: false,
+			noteItem: item,
+		}
+		if item.Folder != "" {
+			note.depth = len(strings.Split(item.Folder, "/"))
+		}
+		target.children = append(target.children, note)
+	}
+
+	sortTree(root)
+
+	// Separate root children: folders first, then root notes at the end
+	var folders, rootNotes []*treeNode
+	for _, c := range root.children {
+		if c.isFolder {
+			folders = append(folders, c)
+		} else {
+			rootNotes = append(rootNotes, c)
+		}
+	}
+
+	result := append(folders, rootNotes...)
+	setLastChildFlags(result)
+	return result
+}
+
+func sortTree(node *treeNode) {
+	if !node.isFolder || len(node.children) == 0 {
+		return
+	}
+	for _, child := range node.children {
+		sortTree(child)
+	}
+	sort.SliceStable(node.children, func(i, j int) bool {
+		ci, cj := node.children[i], node.children[j]
+		if ci.isFolder != cj.isFolder {
+			return ci.isFolder
+		}
+		return strings.ToLower(ci.name) < strings.ToLower(cj.name)
+	})
+}
+
+func setLastChildFlags(nodes []*treeNode) {
+	for i, node := range nodes {
+		node.isLastChild = (i == len(nodes)-1)
+		if node.isFolder {
+			setLastChildFlags(node.children)
+		}
+	}
 }
 
 // humanizeTitle converts a raw filename-based title into a readable form.
 // e.g. "running_azure_blob_storage" → "Running Azure Blob Storage"
 func humanizeTitle(title string) string {
-	// Replace underscores and hyphens with spaces
 	s := strings.ReplaceAll(title, "_", " ")
 	s = strings.ReplaceAll(s, "-", " ")
 
-	// Title-case each word
 	words := strings.Fields(s)
 	for i, w := range words {
 		if len(w) > 0 {
