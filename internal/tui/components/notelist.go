@@ -65,12 +65,29 @@ func NewNoteList() NoteList {
 }
 
 func (n *NoteList) SetItems(items []NoteItem) {
+	// Remember current selection to restore after rebuild
+	var selectedPath string
+	if sel := n.SelectedItem(); sel != nil {
+		selectedPath = sel.Path
+	}
+
 	n.items = items
 	n.tree = buildTree(n.items)
 	n.flatVisible = nil
 	n.rebuildFlatVisible()
 	n.cursor = 0
 	n.offset = 0
+
+	// Restore cursor to previously selected note
+	if selectedPath != "" {
+		for i, node := range n.flatVisible {
+			if !node.isFolder && node.noteItem != nil && node.noteItem.Path == selectedPath {
+				n.cursor = i
+				n.ensureVisible()
+				break
+			}
+		}
+	}
 }
 
 func (n *NoteList) SetSize(width, height int) {
