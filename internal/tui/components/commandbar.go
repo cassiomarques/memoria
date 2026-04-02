@@ -17,6 +17,7 @@ type CommandBar struct {
 	width         int
 	suggestions   []string
 	suggestionIdx int
+	customLabel   string // overrides "CMD" badge when non-empty
 }
 
 // NewCommandBar creates a CommandBar styled with Catppuccin Mocha colors.
@@ -71,6 +72,17 @@ func (c *CommandBar) Reset() {
 	c.input.SetValue("")
 	c.suggestions = nil
 	c.suggestionIdx = -1
+	c.customLabel = ""
+}
+
+// SetLabel overrides the "CMD" badge shown when the command bar is active.
+func (c *CommandBar) SetLabel(label string) {
+	c.customLabel = label
+}
+
+// SetPlaceholder changes the placeholder text shown when the input is empty.
+func (c *CommandBar) SetPlaceholder(text string) {
+	c.input.Placeholder = text
 }
 
 // SetSuggestions sets the completion suggestions for the current input.
@@ -130,12 +142,16 @@ func (c CommandBar) View() string {
 		return style.Render(hint)
 	}
 
+	badgeText := "CMD"
+	if c.customLabel != "" {
+		badgeText = c.customLabel
+	}
 	label := lipgloss.NewStyle().
 		Foreground(theme.ColorCrust).
 		Background(theme.ColorMauve).
 		Bold(true).
 		Padding(0, 1).
-		Render("CMD")
+		Render(badgeText)
 
 	inputView := c.input.View()
 

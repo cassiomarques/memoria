@@ -60,6 +60,10 @@ pendingClear  bool // schedule a message clear after setMessage
 pendingDelete     bool
 pendingDeletePath string // note path or folder path
 pendingDeleteIsFolder bool
+
+// Create-in-folder state
+pendingCreate       bool
+pendingCreateFolder string // target folder path
 }
 
 // NewApp creates a new App with all sub-components initialized (no service).
@@ -229,6 +233,9 @@ return a, nil
 case "d":
 a.initiateDelete()
 return a, nil
+case "n":
+a.initiateCreate()
+return a, nil
 }
 } else {
 // Command bar is active
@@ -238,6 +245,8 @@ return a, tea.Quit
 case "esc":
 a.commandBar.Blur()
 a.commandBar.Reset()
+a.pendingCreate = false
+a.pendingCreateFolder = ""
 a.updateFocusStyles()
 return a, nil
 case "tab":
@@ -249,6 +258,14 @@ input := a.commandBar.Value()
 a.commandBar.Reset()
 a.commandBar.Blur()
 a.updateFocusStyles()
+
+// If we're in create-in-folder mode, treat input as note name
+if a.pendingCreate {
+	folder := a.pendingCreateFolder
+	a.pendingCreate = false
+	a.pendingCreateFolder = ""
+	return a, a.createNoteInFolder(folder, input)
+}
 
 cmd, err := ParseCommand(input)
 if err != nil {
@@ -376,6 +393,50 @@ if a.pendingDeleteIsFolder {
 }
 _ = a.refreshNoteList()
 a.refreshTags()
+}
+
+// initiateCreate starts the create-note-in-folder flow.
+func (a *App) initiateCreate() {
+if a.svc == nil {
+	return
+}
+
+// Determine target folder
+var folder string
+if a.noteList.SelectedIsFolder() {
+	folder = a.noteList.SelectedFolderPath()
+} else if sel := a.noteList.SelectedItem(); sel != nil && sel.Folder != "" {
+	folder = sel.Folder
+}
+
+a.pendingCreate = true
+a.pendingCreateFolder = folder
+
+a.commandBar.SetLabel("NEW")
+if folder != "" {
+	a.commandBar.SetPlaceholder(folder + "/...")
+} else {
+	a.commandBar.SetPlaceholder("note name...")
+}
+a.commandBar.Focus()
+}
+
+// createNoteInFolder creates a note inside the given folder and opens it in the editor.
+func (a *App) createNoteInFolder(folder, name string) tea.Cmd {
+name = strings.TrimSpace(name)
+if name == "" {
+	a.setMessage("Note name cannot be empty", true)
+	return clearMessageCmd()
+}
+
+var path string
+if folder != "" {
+	path = folder + "/" + name
+} else {
+	path = name
+}
+
+return a.cmdNew([]string{path})
 }
 
 // updateFocusStyles sets the focused state on the preview pane.
@@ -898,6 +959,7 @@ helpContent := `# Remember — Commands
 | **p** | Preview selected note |
 | **e** | Edit previewed note (when preview focused) |
 | **d** | Delete selected note or folder |
+| **n** | Create a new note (in focused folder) |
 | **j/k** | Navigate list |
 | **Enter** | Open selected note |
 | **h** | Show help |
