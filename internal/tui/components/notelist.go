@@ -144,6 +144,77 @@ func (n NoteList) SelectedFolderNoteCount() int {
 	return node.countNotes()
 }
 
+// SelectedIsExpanded reports whether the selected folder is expanded.
+func (n NoteList) SelectedIsExpanded() bool {
+	if len(n.flatVisible) == 0 || n.cursor >= len(n.flatVisible) {
+		return false
+	}
+	node := n.flatVisible[n.cursor]
+	return node.isFolder && node.expanded
+}
+
+// CollapseSelected collapses the selected folder.
+// If on a note, collapses the parent folder and moves cursor there.
+func (n *NoteList) CollapseSelected() {
+	if len(n.flatVisible) == 0 || n.cursor >= len(n.flatVisible) {
+		return
+	}
+	node := n.flatVisible[n.cursor]
+
+	if node.isFolder && node.expanded {
+		node.expanded = false
+		n.rebuildFlatVisible()
+		n.clampCursor()
+		return
+	}
+
+	// On a note (or already-collapsed folder): find parent folder and collapse it
+	if !node.isFolder {
+		targetDepth := node.depth - 1
+		for i := n.cursor - 1; i >= 0; i-- {
+			candidate := n.flatVisible[i]
+			if candidate.isFolder && candidate.depth <= targetDepth {
+				candidate.expanded = false
+				n.cursor = i
+				n.rebuildFlatVisible()
+				// Find the parent folder again in rebuilt list
+				for j, fn := range n.flatVisible {
+					if fn == candidate {
+						n.cursor = j
+						break
+					}
+				}
+				n.clampCursor()
+				return
+			}
+		}
+	}
+}
+
+// ExpandSelected expands the selected folder.
+func (n *NoteList) ExpandSelected() {
+	if len(n.flatVisible) == 0 || n.cursor >= len(n.flatVisible) {
+		return
+	}
+	node := n.flatVisible[n.cursor]
+	if !node.isFolder || node.expanded {
+		return
+	}
+	node.expanded = true
+	n.rebuildFlatVisible()
+	n.clampCursor()
+}
+
+func (n *NoteList) clampCursor() {
+	if n.cursor >= len(n.flatVisible) {
+		n.cursor = len(n.flatVisible) - 1
+	}
+	if n.cursor < 0 {
+		n.cursor = 0
+	}
+	n.ensureVisible()
+}
+
 // ItemCount returns the total number of notes (not including folder nodes).
 func (n NoteList) ItemCount() int { return len(n.items) }
 
@@ -203,13 +274,7 @@ func (n *NoteList) toggleFolder() {
 	}
 	node.expanded = !node.expanded
 	n.rebuildFlatVisible()
-	if n.cursor >= len(n.flatVisible) {
-		n.cursor = len(n.flatVisible) - 1
-	}
-	if n.cursor < 0 {
-		n.cursor = 0
-	}
-	n.ensureVisible()
+	n.clampCursor()
 }
 
 func (n *NoteList) moveDown() {
@@ -425,7 +490,7 @@ func buildTree(items []NoteItem) []*treeNode {
 						name:     seg,
 						fullPath: strings.Join(segments[:depth+1], "/"),
 						isFolder: true,
-						expanded: true,
+						expanded: depth == 0, // only top-level folders start expanded
 						depth:    depth,
 						children: make([]*treeNode, 0),
 					}

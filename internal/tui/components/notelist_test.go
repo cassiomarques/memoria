@@ -66,13 +66,14 @@ func TestNoteList_TreeStructure(t *testing.T) {
 	nl.SetItems(sampleItems())
 	nl.SetSize(80, 40)
 
-	// All expanded: 5 folders + 7 notes in folders + 2 root notes = 14
+	// Level-1 folders expanded, nested folders collapsed.
 	// Dotcom(folder), Running Azure, Testing Monolith,
 	// Go(folder), Backporting Deps,
-	// Projects(folder), CodeCoverage(folder), E2e Stream, Qa Report,
+	// Projects(folder), CodeCoverage(folder) [collapsed, hides E2e Stream + Qa Report],
 	// Random(folder), Datadog Monitors, Mysql Extended,
 	// Daily, Scratch Notes
-	expected := 14
+	// = 12 visible
+	expected := 12
 	got := visibleNodeCount(&nl)
 	if got != expected {
 		t.Errorf("expected %d visible nodes, got %d", expected, got)
@@ -383,9 +384,7 @@ func TestNoteList_NestedFolderCollapse(t *testing.T) {
 	for i := 0; i < 5; i++ {
 		nl, _ = nl.Update(simpleKeyPress('j'))
 	}
-	// Should be on Projects folder
 	if nl.SelectedItem() != nil {
-		// Not a folder — try finding Projects
 		t.Logf("cursor at %d, not a folder, navigating further", nl.Cursor())
 	}
 
@@ -394,13 +393,18 @@ func TestNoteList_NestedFolderCollapse(t *testing.T) {
 
 	beforeCount := visibleNodeCount(&nl)
 
-	// Collapse CodeCoverage
+	// CodeCoverage starts collapsed — expand it first
 	nl, _ = nl.Update(keyPress("enter"))
+	expandedCount := visibleNodeCount(&nl)
+	if expandedCount != beforeCount+2 {
+		t.Errorf("expected %d visible after expanding CodeCoverage, got %d", beforeCount+2, expandedCount)
+	}
 
+	// Now collapse CodeCoverage
+	nl, _ = nl.Update(keyPress("enter"))
 	afterCount := visibleNodeCount(&nl)
-	// CodeCoverage had 2 notes
-	if afterCount != beforeCount-2 {
-		t.Errorf("expected %d visible after collapsing CodeCoverage, got %d", beforeCount-2, afterCount)
+	if afterCount != beforeCount {
+		t.Errorf("expected %d visible after collapsing CodeCoverage, got %d", beforeCount, afterCount)
 	}
 }
 
@@ -416,12 +420,12 @@ func TestNoteList_CollapseParentHidesNestedChildren(t *testing.T) {
 		nl, _ = nl.Update(simpleKeyPress('j'))
 	}
 
-	// Collapse Projects — should hide CodeCoverage folder and its 2 notes (3 nodes)
+	// Collapse Projects — CodeCoverage (collapsed subfolder) is the only visible child = 1 node hidden
 	nl, _ = nl.Update(keyPress("enter"))
 
 	afterCount := visibleNodeCount(&nl)
-	if afterCount != beforeCount-3 {
-		t.Errorf("expected %d visible after collapsing Projects, got %d", beforeCount-3, afterCount)
+	if afterCount != beforeCount-1 {
+		t.Errorf("expected %d visible after collapsing Projects, got %d", beforeCount-1, afterCount)
 	}
 }
 

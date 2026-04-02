@@ -239,7 +239,17 @@ return a, cmd
 }
 }
 return a, nil
-case "h":
+case "h", "left":
+// Collapse focused folder, or collapse parent if on a note
+a.noteList.CollapseSelected()
+return a, nil
+case "l", "right":
+// Expand collapsed folder
+if a.noteList.SelectedIsFolder() && !a.noteList.SelectedIsExpanded() {
+	a.noteList.ExpandSelected()
+}
+return a, nil
+case "?":
 a.cmdHelp()
 return a, nil
 case "d":
@@ -973,10 +983,11 @@ helpContent := `# Remember — Commands
 | **d** | Delete selected note or folder |
 | **n** | Create a new note (in focused folder) |
 | **j/k** | Navigate list |
-| **Enter** | Open selected note |
-| **h** | Show help |
-| **Esc** | Close preview/help, dismiss command bar |
-| **q** | Quit |
+| **h/l, ←/→** | Collapse/expand folder |
+| **Enter** | Open note / toggle folder |
+| **?** | Show help |
+| **Esc/q** | Close preview/help |
+| **q** | Quit (when only tree visible) |
 `
 a.preview.SetContent("Help", helpContent)
 a.previewedPath = "" // not a note preview
