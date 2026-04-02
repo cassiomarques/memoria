@@ -1,0 +1,106 @@
+package main
+
+import (
+	"fmt"
+	"os"
+	"path/filepath"
+
+	tea "charm.land/bubbletea/v2"
+	"github.com/cassiomarques/remember/internal/config"
+	"github.com/cassiomarques/remember/internal/editor"
+	"github.com/cassiomarques/remember/internal/git"
+	"github.com/cassiomarques/remember/internal/search"
+	"github.com/cassiomarques/remember/internal/service"
+	"github.com/cassiomarques/remember/internal/storage"
+	"github.com/cassiomarques/remember/internal/tui"
+)
+
+var version = "dev"
+
+func main() {
+// Load config (creates default if not found)
+cfg, err := config.Load(config.DefaultConfigPath())
+if err != nil {
+fmt.Fprintf(os.Stderr, "Error loading config: %v\n", err)
+os.Exit(1)
+}
+
+// Ensure directories exist
+if err := config.EnsureDirs(cfg); err != nil {
+fmt.Fprintf(os.Stderr, "Error creating directories: %v\n", err)
+os.Exit(1)
+}
+
+// Save default config on first run
+cfgPath := config.DefaultConfigPath()
+if _, err := os.Stat(cfgPath); os.IsNotExist(err) {
+if err := cfg.Save(cfgPath); err != nil {
+fmt.Fprintf(os.Stderr, "Warning: could not save default config: %v\n", err)
+}
+}
+
+// Resolve notes directory
+notesDir, err := cfg.ResolveNotesDir()
+if err != nil {
+fmt.Fprintf(os.Stderr, "Error resolving notes dir: %v\n", err)
+os.Exit(1)
+}
+
+// Initialize FileStore
+files, err := storage.NewFileStore(notesDir)
+if err != nil {
+fmt.Fprintf(os.Stderr, "Error initializing file store: %v\n", err)
+os.Exit(1)
+}
+
+// Initialize MetaStore (SQLite)
+dbPath := filepath.Join(config.DefaultConfigDir(), "meta.db")
+meta, err := storage.NewMetaStore(dbPath)
+if err != nil {
+fmt.Fprintf(os.Stderr, "Error initializing meta store: %v\n", err)
+os.Exit(1)
+}
+
+// Initialize SearchIndex (Bleve)
+indexPath := filepath.Join(config.DefaultConfigDir(), "search.bleve")
+idx, err := search.NewSearchIndex(indexPath)
+if err != nil {
+fmt.Fprintf(os.Stderr, "Error initializing search index: %v\n", err)
+os.Exit(1)
+}
+
+// Initialize git repository
+repo, err := git.InitOrOpen(notesDir)
+if err != nil {
+fmt.Fprintf(os.Stderr, "Warning: git init failed: %v\n", err)
+repo = nil
+}
+
+// Initialize editor
+ed := editor.New(cfg.ResolveEditor())
+
+// Create NoteService
+svc := service.New(files, meta, idx, repo, ed)
+
+// Initial sync: load notes from disk into metadata + search
+if err := svc.Sync(); err != nil {
+fmt.Fprintf(os.Stderr, "Warning: initial sync failed: %v\n", err)
+}
+
+// Ensure all notes have frontmatter
+if count, err := svc.EnsureFrontmatter(); err != nil {
+fmt.Fprintf(os.Stderr, "Warning: frontmatter migration failed: %v\n", err)
+} else if count > 0 {
+fmt.Fprintf(os.Stderr, "Added frontmatter to %d notes\n", count)
+}
+
+// Create app wired to service
+app := tui.NewAppWithService(svc)
+
+// Run Bubble Tea program
+p := tea.NewProgram(app)
+if _, err := p.Run(); err != nil {
+fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+os.Exit(1)
+}
+}
