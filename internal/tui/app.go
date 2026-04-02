@@ -159,7 +159,19 @@ return a, clearMessageCmd()
 // Global quit keys (only when command bar is not active)
 if !a.commandBar.Active() {
 switch key {
-case "q", "ctrl+c":
+case "ctrl+c":
+return a, tea.Quit
+case "q":
+// Contextual: close preview/help if visible, otherwise quit
+if a.preview.Visible() {
+a.preview.Toggle()
+a.previewedPath = ""
+a.focusedPane = focusList
+a.resizeComponents()
+a.updateFocusStyles()
+a.statusBar.ClearMessage()
+return a, nil
+}
 return a, tea.Quit
 case "esc":
 // Close preview/help pane if visible
