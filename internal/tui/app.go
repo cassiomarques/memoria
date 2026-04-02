@@ -846,14 +846,13 @@ return a.currentFolder
 const (
 statusBarHeight  = 1
 commandBarHeight = 1
-titleBarHeight   = 1
 )
 
 func (a *App) resizeComponents() {
 a.statusBar.SetWidth(a.width)
 a.commandBar.SetWidth(a.width)
 
-contentHeight := a.height - statusBarHeight - commandBarHeight - titleBarHeight
+contentHeight := a.height - statusBarHeight - commandBarHeight
 if contentHeight < 1 {
 contentHeight = 1
 }
@@ -880,10 +879,6 @@ v.AltScreen = true
 return v
 }
 
-titleBar := a.styles.TitleBar.Width(a.width).Render(
-fmt.Sprintf("📝 remember — %d notes", a.noteList.ItemCount()),
-)
-
 var mainContent string
 if a.preview.Visible() {
 mainContent = lipgloss.JoinHorizontal(lipgloss.Top,
@@ -902,7 +897,6 @@ statusView = msgView
 }
 
 content := lipgloss.JoinVertical(lipgloss.Left,
-titleBar,
 mainContent,
 a.commandBar.View(),
 statusView,

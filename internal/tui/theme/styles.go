@@ -51,9 +51,12 @@ func DefaultStyles() Styles {
 	return Styles{
 		TitleBar: lipgloss.NewStyle().
 			Bold(true).
-			Foreground(ColorCrust).
-			Background(ColorMauve).
-			Padding(0, 1),
+			Foreground(ColorLavender).
+			Background(ColorMantle).
+			Padding(0, 1).
+			BorderStyle(lipgloss.NormalBorder()).
+			BorderBottom(true).
+			BorderForeground(ColorSurface2),
 
 		NoteItem: lipgloss.NewStyle().
 			Foreground(ColorText).

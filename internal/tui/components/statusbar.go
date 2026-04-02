@@ -60,7 +60,7 @@ func (s StatusBar) View() string {
 
 	countText := fmt.Sprintf("%d notes", s.noteCount)
 
-	hints := lipgloss.NewStyle().Foreground(theme.ColorOverlay1).Render("? help  : cmd  p preview")
+	hints := lipgloss.NewStyle().Foreground(theme.ColorOverlay1).Render("h help  : cmd  p preview")
 
 	right := countText + sep + syncText + sep + hints
 
