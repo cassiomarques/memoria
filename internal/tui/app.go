@@ -4,6 +4,7 @@ import (
 "fmt"
 "os/exec"
 "strings"
+"time"
 
 tea "charm.land/bubbletea/v2"
 "charm.land/lipgloss/v2"
@@ -32,6 +33,9 @@ message string
 isError bool
 }
 
+// clearMessageMsg signals that the status bar message should be cleared.
+type clearMessageMsg struct{}
+
 // App is the root Bubble Tea model that composes all TUI components.
 type App struct {
 noteList   components.NoteList
@@ -49,9 +53,8 @@ styles theme.Styles
 
 svc           *service.NoteService
 currentFolder string
-message       string
-messageStyle  lipgloss.Style
 allTags       []string
+pendingClear  bool // schedule a message clear after setMessage
 }
 
 // NewApp creates a new App with all sub-components initialized (no service).
@@ -118,10 +121,14 @@ if a.preview.Visible() && a.previewedPath == msg.path {
 }
 }
 }
-return a, nil
+return a, clearMessageCmd()
 
 case commandResultMsg:
 a.setMessage(msg.message, msg.isError)
+return a, clearMessageCmd()
+
+case clearMessageMsg:
+a.statusBar.ClearMessage()
 return a, nil
 
 case tea.KeyPressMsg:
@@ -140,7 +147,7 @@ a.previewedPath = ""
 a.focusedPane = focusList
 a.resizeComponents()
 a.updateFocusStyles()
-a.message = ""
+a.statusBar.ClearMessage()
 return a, nil
 }
 case ":", "/":
@@ -225,9 +232,16 @@ a.updateFocusStyles()
 cmd, err := ParseCommand(input)
 if err != nil {
 a.setMessage(err.Error(), true)
-return a, nil
+return a, clearMessageCmd()
 }
 teaCmd := a.executeCommand(cmd)
+if a.pendingClear {
+a.pendingClear = false
+if teaCmd != nil {
+	return a, tea.Batch(teaCmd, clearMessageCmd())
+}
+return a, clearMessageCmd()
+}
 if teaCmd != nil {
 return a, teaCmd
 }
@@ -261,6 +275,12 @@ cmds = append(cmds, cmd)
 // Update preview when selected note changes
 // (removed auto-sync: preview now loads on-demand via 'p')
 
+// Schedule auto-clear for status messages
+if a.pendingClear {
+a.pendingClear = false
+cmds = append(cmds, clearMessageCmd())
+}
+
 return a, tea.Batch(cmds...)
 }
 
@@ -284,14 +304,23 @@ func (a *App) updateFocusStyles() {
 a.preview.SetFocused(a.focusedPane == focusPreview && a.preview.Visible())
 }
 
-// setMessage sets a status message to display.
+// setMessage shows a message in the status bar and schedules auto-clear.
 func (a *App) setMessage(msg string, isError bool) {
-a.message = msg
+var style lipgloss.Style
 if isError {
-a.messageStyle = a.styles.ErrorMessage
+	style = a.styles.ErrorMessage
 } else {
-a.messageStyle = a.styles.SuccessMessage
+	style = a.styles.SuccessMessage
 }
+a.statusBar.SetMessage(msg, style)
+a.pendingClear = true
+}
+
+// clearMessageCmd returns a command that clears the message after a delay.
+func clearMessageCmd() tea.Cmd {
+return tea.Tick(3*time.Second, func(t time.Time) tea.Msg {
+	return clearMessageMsg{}
+})
 }
 
 // refreshNoteList reloads notes from the service.
@@ -889,12 +918,8 @@ a.preview.View(),
 mainContent = a.noteList.View()
 }
 
-// Show status message or status bar
+// Status bar (messages are now shown inline)
 statusView := a.statusBar.View()
-if a.message != "" {
-msgView := a.messageStyle.Width(a.width).Padding(0, 1).Render(a.message)
-statusView = msgView
-}
 
 content := lipgloss.JoinVertical(lipgloss.Left,
 mainContent,
