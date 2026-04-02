@@ -132,6 +132,16 @@ if !a.commandBar.Active() {
 switch key {
 case "q", "ctrl+c":
 return a, tea.Quit
+case "esc":
+// Close preview/help pane if visible
+if a.preview.Visible() {
+a.preview.Toggle()
+a.previewedPath = ""
+a.focusedPane = focusList
+a.resizeComponents()
+a.updateFocusStyles()
+return a, nil
+}
 case ":", "/":
 cmd := a.commandBar.Focus()
 cmds = append(cmds, cmd)
@@ -193,7 +203,7 @@ return a, nil
 switch key {
 case "ctrl+c":
 return a, tea.Quit
-case "escape":
+case "esc":
 a.commandBar.Blur()
 a.commandBar.Reset()
 a.updateFocusStyles()
