@@ -140,6 +140,7 @@ a.previewedPath = ""
 a.focusedPane = focusList
 a.resizeComponents()
 a.updateFocusStyles()
+a.message = ""
 return a, nil
 }
 case ":", "/":
@@ -196,6 +197,9 @@ cmd := a.openInEditor(sel.Path)
 return a, cmd
 }
 }
+return a, nil
+case "h":
+a.cmdHelp()
 return a, nil
 }
 } else {
@@ -787,7 +791,8 @@ helpContent := `# Remember — Commands
 | **e** | Edit previewed note (when preview focused) |
 | **j/k** | Navigate list |
 | **Enter** | Open selected note |
-| **Esc** | Close command bar |
+| **h** | Show help |
+| **Esc** | Close preview/help, dismiss command bar |
 | **q** | Quit |
 `
 a.preview.SetContent("Help", helpContent)
@@ -796,7 +801,7 @@ if !a.preview.Visible() {
 a.preview.Toggle()
 a.resizeComponents()
 }
-a.setMessage("Press p to close help", false)
+a.setMessage("Press Esc to close help", false)
 }
 
 // openInEditor launches the configured editor for the given note path.
