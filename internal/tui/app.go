@@ -108,6 +108,13 @@ a.setMessage("After edit error: "+err.Error(), true)
 } else {
 a.setMessage("Edited: "+msg.path, false)
 _ = a.refreshNoteList()
+// Refresh preview if we edited the previewed note
+if a.preview.Visible() && a.previewedPath == msg.path {
+	n, err := a.svc.Get(msg.path)
+	if err == nil {
+		a.preview.SetContent(n.Title, n.Content)
+	}
+}
 }
 }
 }
@@ -164,6 +171,12 @@ a.focusedPane = focusList
 a.updateFocusStyles()
 }
 return a, nil
+case "e":
+// Edit the previewed note when preview is focused
+if a.focusedPane == focusPreview && a.preview.Visible() && a.previewedPath != "" {
+	cmd := a.openInEditor(a.previewedPath)
+	return a, cmd
+}
 case "enter":
 // Open selected note in editor
 if a.svc != nil {
@@ -761,6 +774,7 @@ helpContent := `# Remember — Commands
 | **:** or **/** | Open command bar |
 | **Tab** | Switch focus / autocomplete |
 | **p** | Preview selected note |
+| **e** | Edit previewed note (when preview focused) |
 | **j/k** | Navigate list |
 | **Enter** | Open selected note |
 | **Esc** | Close command bar |
