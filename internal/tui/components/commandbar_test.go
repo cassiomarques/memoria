@@ -3,6 +3,8 @@ package components
 import (
 	"strings"
 	"testing"
+
+	"charm.land/lipgloss/v2"
 )
 
 func TestCommandBar_NewCommandBar(t *testing.T) {
@@ -52,31 +54,38 @@ func TestCommandBar_ViewNotEmpty(t *testing.T) {
 func TestStatusBar_View(t *testing.T) {
 	sb := NewStatusBar()
 	sb.SetWidth(120)
-	sb.SetFolder("work/projects")
 	sb.SetNoteCount(42)
 	sb.SetSynced(true)
-	sb.SetTagFilter("go")
 
 	view := sb.View()
-	if !strings.Contains(view, "work/projects") {
-		t.Errorf("expected folder in view, got: %q", view)
-	}
 	if !strings.Contains(view, "42") {
 		t.Errorf("expected note count in view, got: %q", view)
 	}
-	if !strings.Contains(view, "go") {
-		t.Errorf("expected tag filter in view, got: %q", view)
-	}
-	if !strings.Contains(view, "✓") {
+	if !strings.Contains(view, "synced") {
 		t.Errorf("expected sync indicator in view, got: %q", view)
 	}
 }
 
-func TestStatusBar_DefaultFolder(t *testing.T) {
+func TestStatusBar_Message(t *testing.T) {
 	sb := NewStatusBar()
 	sb.SetWidth(80)
+	sb.SetNoteCount(10)
+	sb.SetSynced(true)
+
+	style := lipgloss.NewStyle().Foreground(lipgloss.Color("#a6e3a1"))
+	sb.SetMessage("Edited: test.md", style)
+
 	view := sb.View()
-	if !strings.Contains(view, "📂 /") {
-		t.Error("expected default folder in view")
+	if !strings.Contains(view, "Edited") {
+		t.Error("expected message in view")
+	}
+	if !strings.Contains(view, "10 notes") {
+		t.Error("expected note count alongside message")
+	}
+
+	sb.ClearMessage()
+	view = sb.View()
+	if strings.Contains(view, "Edited") {
+		t.Error("expected message to be cleared")
 	}
 }

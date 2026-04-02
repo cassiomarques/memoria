@@ -48,37 +48,27 @@ func (s StatusBar) Update(msg tea.Msg) (StatusBar, tea.Cmd) {
 func (s StatusBar) View() string {
 	sep := lipgloss.NewStyle().Foreground(theme.ColorOverlay0).Render(" │ ")
 
-	// Left side: message (if any) or folder path
+	// Left side: message (if any) — otherwise empty
 	var left string
 	if s.message != "" {
 		left = s.messageStyle.Render(s.message)
-	} else {
-		left = "📂 " + s.folder
-		if s.folder == "" {
-			left = "📂 /"
-		}
-		if s.tagFilter != "" {
-			left += sep + s.styles.Tag.Render(s.tagFilter)
-		}
 	}
 
-	// Colored sync status
+	// Right side: note count + sync status
 	var syncText string
 	if s.synced {
-		syncText = lipgloss.NewStyle().Foreground(theme.ColorGreen).Render("✓ synced")
+		syncText = lipgloss.NewStyle().Foreground(theme.ColorGreen).Render("synced")
 	} else {
-		syncText = lipgloss.NewStyle().Foreground(theme.ColorYellow).Render("⏳ pending")
+		syncText = lipgloss.NewStyle().Foreground(theme.ColorYellow).Render("unsynced")
 	}
 
 	countText := fmt.Sprintf("%d notes", s.noteCount)
+	right := countText + sep + syncText
 
-	hints := lipgloss.NewStyle().Foreground(theme.ColorOverlay1).Render("h help  : cmd  p preview")
-
-	right := countText + sep + syncText + sep + hints
-
-	// Pad to fill the full width
+	// Pad to fill the full width (account for style's horizontal padding of 2)
+	innerWidth := s.width - 2
 	usedWidth := lipgloss.Width(left) + lipgloss.Width(right)
-	padding := s.width - usedWidth
+	padding := innerWidth - usedWidth
 	if padding < 1 {
 		padding = 1
 	}
