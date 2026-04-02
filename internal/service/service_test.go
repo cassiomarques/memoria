@@ -708,6 +708,108 @@ func TestEnsureFrontmatter_UsesFileMtime(t *testing.T) {
 	}
 }
 
+func TestDeleteFolder(t *testing.T) {
+	svc := setupService(t)
+
+	// Create notes in testfolder
+	_, err := svc.Create("testfolder/note1", "Note 1", nil)
+	if err != nil {
+		t.Fatalf("Create note1: %v", err)
+	}
+	_, err = svc.Create("testfolder/note2", "Note 2", nil)
+	if err != nil {
+		t.Fatalf("Create note2: %v", err)
+	}
+	_, err = svc.Create("testfolder/note3", "Note 3", nil)
+	if err != nil {
+		t.Fatalf("Create note3: %v", err)
+	}
+	// Create a note in another folder
+	_, err = svc.Create("other/keep.md", "Keep me", nil)
+	if err != nil {
+		t.Fatalf("Create keep: %v", err)
+	}
+
+	count, err := svc.DeleteFolder("testfolder")
+	if err != nil {
+		t.Fatalf("DeleteFolder: %v", err)
+	}
+	if count != 3 {
+		t.Errorf("expected 3 deleted, got %d", count)
+	}
+
+	// Verify the notes are gone from ListAll
+	all, err := svc.ListAll()
+	if err != nil {
+		t.Fatalf("ListAll: %v", err)
+	}
+	for _, n := range all {
+		if strings.HasPrefix(n.Path, "testfolder/") {
+			t.Errorf("note %s should have been deleted", n.Path)
+		}
+	}
+
+	// Notes in other folders are unaffected
+	if len(all) != 1 {
+		t.Errorf("expected 1 remaining note, got %d", len(all))
+	}
+
+	// Verify the folder directory no longer exists on disk
+	folderPath := filepath.Join(svc.files.Root(), "testfolder")
+	if _, err := os.Stat(folderPath); !os.IsNotExist(err) {
+		t.Errorf("expected testfolder directory to be removed, but it still exists")
+	}
+}
+
+func TestDeleteFolder_Empty(t *testing.T) {
+	svc := setupService(t)
+
+	count, err := svc.DeleteFolder("nonexistent")
+	if err != nil {
+		t.Fatalf("DeleteFolder: %v", err)
+	}
+	if count != 0 {
+		t.Errorf("expected 0 deleted for non-existent folder, got %d", count)
+	}
+}
+
+func TestDeleteFolder_NestedFolder(t *testing.T) {
+	svc := setupService(t)
+
+	_, err := svc.Create("parent/child/note1", "Child 1", nil)
+	if err != nil {
+		t.Fatalf("Create child/note1: %v", err)
+	}
+	_, err = svc.Create("parent/child/note2", "Child 2", nil)
+	if err != nil {
+		t.Fatalf("Create child/note2: %v", err)
+	}
+	_, err = svc.Create("parent/other.md", "Other note", nil)
+	if err != nil {
+		t.Fatalf("Create parent/other: %v", err)
+	}
+
+	count, err := svc.DeleteFolder("parent/child")
+	if err != nil {
+		t.Fatalf("DeleteFolder: %v", err)
+	}
+	if count != 2 {
+		t.Errorf("expected 2 deleted, got %d", count)
+	}
+
+	// Verify only child notes are deleted
+	all, err := svc.ListAll()
+	if err != nil {
+		t.Fatalf("ListAll: %v", err)
+	}
+	if len(all) != 1 {
+		t.Fatalf("expected 1 remaining note, got %d", len(all))
+	}
+	if all[0].Path != "parent/other.md" {
+		t.Errorf("expected parent/other.md to remain, got %s", all[0].Path)
+	}
+}
+
 func TestOpen_AddsFrontmatterOnAccess(t *testing.T) {
 	svc := setupService(t)
 

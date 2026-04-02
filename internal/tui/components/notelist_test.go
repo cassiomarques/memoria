@@ -480,3 +480,243 @@ func TestNoteList_SingleFolder(t *testing.T) {
 		t.Errorf("expected note_a, got %v", sel)
 	}
 }
+
+func TestNoteList_SelectedIsFolder(t *testing.T) {
+	nl := NewNoteList()
+	nl.SetItems(sampleItems())
+	nl.SetSize(80, 40)
+
+	// Cursor at 0 = Dotcom folder
+	if !nl.SelectedIsFolder() {
+		t.Error("expected true for folder at cursor 0")
+	}
+
+	// Move to first note (Running Azure)
+	nl, _ = nl.Update(simpleKeyPress('j'))
+	if nl.SelectedIsFolder() {
+		t.Error("expected false for note")
+	}
+
+	// Empty list
+	empty := NewNoteList()
+	if empty.SelectedIsFolder() {
+		t.Error("expected false for empty list")
+	}
+}
+
+func TestNoteList_SelectedFolderPath(t *testing.T) {
+	nl := NewNoteList()
+	nl.SetItems(sampleItems())
+	nl.SetSize(80, 40)
+
+	// Cursor at 0 = Dotcom folder
+	if got := nl.SelectedFolderPath(); got != "Dotcom" {
+		t.Errorf("expected Dotcom, got %q", got)
+	}
+
+	// Navigate to CodeCoverage folder (cursor 6)
+	// 0:Dotcom 1:Running Azure 2:Testing Monolith 3:Go 4:Backporting Deps 5:Projects 6:CodeCoverage
+	for i := 0; i < 6; i++ {
+		nl, _ = nl.Update(simpleKeyPress('j'))
+	}
+	if got := nl.SelectedFolderPath(); got != "Projects/CodeCoverage" {
+		t.Errorf("expected Projects/CodeCoverage, got %q", got)
+	}
+
+	// Move to a note (Random folder then its first note)
+	nl, _ = nl.Update(simpleKeyPress('j')) // Random folder
+	nl, _ = nl.Update(simpleKeyPress('j')) // Datadog Monitors note
+	if got := nl.SelectedFolderPath(); got != "" {
+		t.Errorf("expected empty string for note, got %q", got)
+	}
+}
+
+func TestNoteList_SelectedFolderNoteCount(t *testing.T) {
+	nl := NewNoteList()
+	nl.SetItems(sampleItems())
+	nl.SetSize(80, 40)
+
+	// Cursor at 0 = Dotcom folder → 2 notes
+	if got := nl.SelectedFolderNoteCount(); got != 2 {
+		t.Errorf("expected 2 notes in Dotcom, got %d", got)
+	}
+
+	// Navigate to Projects folder (cursor 5)
+	for i := 0; i < 5; i++ {
+		nl, _ = nl.Update(simpleKeyPress('j'))
+	}
+	// Projects contains CodeCoverage (subfolder) with 2 notes → recursive count = 2
+	if got := nl.SelectedFolderNoteCount(); got != 2 {
+		t.Errorf("expected 2 notes in Projects (recursive), got %d", got)
+	}
+
+	// Move to a note
+	nl, _ = nl.Update(simpleKeyPress('j')) // CodeCoverage folder
+	nl, _ = nl.Update(simpleKeyPress('j')) // Random folder
+	nl, _ = nl.Update(simpleKeyPress('j')) // Datadog Monitors note
+	if got := nl.SelectedFolderNoteCount(); got != 0 {
+		t.Errorf("expected 0 for note, got %d", got)
+	}
+}
+
+func TestNoteList_SelectedIsExpanded(t *testing.T) {
+	nl := NewNoteList()
+	nl.SetItems(sampleItems())
+	nl.SetSize(80, 40)
+
+	// Cursor at 0 = Dotcom (top-level, starts expanded)
+	if !nl.SelectedIsExpanded() {
+		t.Error("expected top-level folder Dotcom to be expanded")
+	}
+
+	// Navigate to CodeCoverage (cursor 6, nested, starts collapsed)
+	for i := 0; i < 6; i++ {
+		nl, _ = nl.Update(simpleKeyPress('j'))
+	}
+	if nl.SelectedIsExpanded() {
+		t.Error("expected nested folder CodeCoverage to start collapsed")
+	}
+
+	// Navigate to a note
+	nl, _ = nl.Update(simpleKeyPress('j')) // Random folder
+	nl, _ = nl.Update(simpleKeyPress('j')) // Datadog Monitors note
+	if nl.SelectedIsExpanded() {
+		t.Error("expected false for note")
+	}
+}
+
+func TestNoteList_CollapseSelectedFromNote(t *testing.T) {
+	nl := NewNoteList()
+	nl.SetItems(sampleItems())
+	nl.SetSize(80, 40)
+
+	beforeCount := visibleNodeCount(&nl) // 12
+
+	// Navigate to Running Azure (cursor 1, note under Dotcom)
+	nl, _ = nl.Update(simpleKeyPress('j'))
+	if nl.SelectedItem() == nil || nl.SelectedItem().Title != "running_azure" {
+		t.Fatal("expected to be on Running Azure note")
+	}
+
+	nl.CollapseSelected()
+
+	// Dotcom should now be collapsed, cursor moved to Dotcom folder
+	if !nl.SelectedIsFolder() {
+		t.Error("expected cursor to be on Dotcom folder after collapse")
+	}
+	if got := nl.SelectedFolderPath(); got != "Dotcom" {
+		t.Errorf("expected cursor on Dotcom, got %q", got)
+	}
+
+	// Visible count decreased by 2 (Running Azure + Testing Monolith hidden)
+	afterCount := visibleNodeCount(&nl)
+	if afterCount != beforeCount-2 {
+		t.Errorf("expected %d visible nodes after collapse, got %d", beforeCount-2, afterCount)
+	}
+}
+
+func TestNoteList_ExpandSelected(t *testing.T) {
+	nl := NewNoteList()
+	nl.SetItems(sampleItems())
+	nl.SetSize(80, 40)
+
+	beforeCount := visibleNodeCount(&nl) // 12
+
+	// Navigate to CodeCoverage (cursor 6, collapsed)
+	for i := 0; i < 6; i++ {
+		nl, _ = nl.Update(simpleKeyPress('j'))
+	}
+	if got := nl.SelectedFolderPath(); got != "Projects/CodeCoverage" {
+		t.Fatalf("expected to be on CodeCoverage, got %q", got)
+	}
+
+	nl.ExpandSelected()
+
+	// Visible count increased by 2 (E2e Stream + Qa Report now visible)
+	afterCount := visibleNodeCount(&nl)
+	if afterCount != beforeCount+2 {
+		t.Errorf("expected %d visible nodes after expand, got %d", beforeCount+2, afterCount)
+	}
+
+	// Cursor stays on CodeCoverage folder
+	if got := nl.SelectedFolderPath(); got != "Projects/CodeCoverage" {
+		t.Errorf("expected cursor to stay on CodeCoverage, got %q", got)
+	}
+}
+
+func TestNoteList_NestedFoldersStartCollapsed(t *testing.T) {
+	nl := NewNoteList()
+	nl.SetItems(sampleItems())
+	nl.SetSize(80, 40)
+
+	// CodeCoverage's notes (E2e Stream, Qa Report) should NOT be in flatVisible
+	for i := 0; i < visibleNodeCount(&nl); i++ {
+		node := nl.flatVisible[i]
+		if !node.isFolder && node.noteItem != nil {
+			if node.noteItem.Folder == "Projects/CodeCoverage" {
+				t.Errorf("CodeCoverage note %q should not be visible when collapsed", node.noteItem.Title)
+			}
+		}
+	}
+
+	// Navigate to CodeCoverage and expand it
+	for i := 0; i < 6; i++ {
+		nl, _ = nl.Update(simpleKeyPress('j'))
+	}
+	nl.ExpandSelected()
+
+	// Now the notes should appear
+	found := 0
+	for i := 0; i < visibleNodeCount(&nl); i++ {
+		node := nl.flatVisible[i]
+		if !node.isFolder && node.noteItem != nil && node.noteItem.Folder == "Projects/CodeCoverage" {
+			found++
+		}
+	}
+	if found != 2 {
+		t.Errorf("expected 2 CodeCoverage notes visible after expand, got %d", found)
+	}
+}
+
+func TestNoteList_CollapseAlreadyCollapsed(t *testing.T) {
+	nl := NewNoteList()
+	nl.SetItems(sampleItems())
+	nl.SetSize(80, 40)
+
+	// Navigate to CodeCoverage (cursor 6, already collapsed)
+	for i := 0; i < 6; i++ {
+		nl, _ = nl.Update(simpleKeyPress('j'))
+	}
+
+	beforeCount := visibleNodeCount(&nl)
+	beforeCursor := nl.Cursor()
+
+	// Collapse an already-collapsed folder — should be a no-op
+	nl.CollapseSelected()
+
+	if visibleNodeCount(&nl) != beforeCount {
+		t.Errorf("expected no change in visible count, got %d (was %d)", visibleNodeCount(&nl), beforeCount)
+	}
+	if nl.Cursor() != beforeCursor {
+		t.Errorf("expected cursor to stay at %d, got %d", beforeCursor, nl.Cursor())
+	}
+}
+
+func TestNoteList_ExpandAlreadyExpanded(t *testing.T) {
+	nl := NewNoteList()
+	nl.SetItems(sampleItems())
+	nl.SetSize(80, 40)
+
+	// Cursor at 0 = Dotcom (already expanded)
+	beforeCount := visibleNodeCount(&nl)
+	beforeCursor := nl.Cursor()
+
+	nl.ExpandSelected()
+
+	if visibleNodeCount(&nl) != beforeCount {
+		t.Errorf("expected no change in visible count, got %d (was %d)", visibleNodeCount(&nl), beforeCount)
+	}
+	if nl.Cursor() != beforeCursor {
+		t.Errorf("expected cursor to stay at %d, got %d", beforeCursor, nl.Cursor())
+	}
+}
