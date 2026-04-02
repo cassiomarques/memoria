@@ -1,6 +1,7 @@
 package components
 
 import (
+	"fmt"
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
@@ -10,7 +11,7 @@ import (
 	"github.com/cassiomarques/remember/internal/tui/theme"
 )
 
-const placeholderText = "No note selected"
+const placeholderText = "Press p to preview a note"
 
 // Preview is a Glamour-based markdown preview pane with scrollable viewport.
 type Preview struct {
@@ -154,17 +155,22 @@ func (p Preview) View() string {
 	if p.content == "" {
 		placeholder := lipgloss.NewStyle().
 			Foreground(theme.ColorOverlay0).
-			Width(p.width - 2).
-			Height(p.height - 2).
+			Width(p.width - 4).
+			Height(p.height - 4).
 			Align(lipgloss.Center, lipgloss.Center)
-		return borderStyle.Render(placeholder.Render(placeholderText))
+		return borderStyle.Render(placeholder.Render("Press p to preview a note"))
 	}
 
-	// Title at top of the border
+	// Title bar with scroll position
 	titleText := titleStyle.Render(" " + p.title + " ")
-	vpView := p.viewport.View()
+	scrollPct := p.viewport.ScrollPercent()
+	scrollInfo := lipgloss.NewStyle().
+		Foreground(theme.ColorOverlay0).
+		Render(fmt.Sprintf(" %d%%", int(scrollPct*100)))
+	titleLine := titleText + scrollInfo
 
-	content := lipgloss.JoinVertical(lipgloss.Left, titleText, vpView)
+	vpView := p.viewport.View()
+	content := lipgloss.JoinVertical(lipgloss.Left, titleLine, vpView)
 
 	return borderStyle.Render(content)
 }

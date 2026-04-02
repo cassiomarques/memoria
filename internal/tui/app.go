@@ -40,8 +40,8 @@ statusBar  components.StatusBar
 preview    components.Preview
 
 focusedPane focusedPane
-// Track selected note to detect changes
-lastSelectedPath string
+// Track which note is currently previewed
+previewedPath string
 
 width  int
 height int
@@ -130,9 +130,29 @@ cmd := a.commandBar.Focus()
 cmds = append(cmds, cmd)
 return a, tea.Batch(cmds...)
 case "p":
-a.preview.Toggle()
-a.resizeComponents()
-a.updateFocusStyles()
+sel := a.noteList.SelectedItem()
+if sel == nil {
+	// On a folder — just toggle visibility
+	a.preview.Toggle()
+	a.resizeComponents()
+	a.updateFocusStyles()
+	return a, nil
+}
+if a.preview.Visible() && a.previewedPath == sel.Path {
+	// Same note — toggle off
+	a.preview.Toggle()
+	a.previewedPath = ""
+	a.resizeComponents()
+	a.updateFocusStyles()
+} else {
+	// Load this note into preview
+	a.loadPreview(sel)
+	if !a.preview.Visible() {
+		a.preview.Toggle()
+		a.resizeComponents()
+	}
+	a.updateFocusStyles()
+}
 return a, nil
 case "tab":
 if a.preview.Visible() {
@@ -212,37 +232,24 @@ cmds = append(cmds, cmd)
 }
 
 // Update preview when selected note changes
-a.syncPreviewContent()
+// (removed auto-sync: preview now loads on-demand via 'p')
 
 return a, tea.Batch(cmds...)
 }
 
-// syncPreviewContent updates the preview pane when the selected note changes.
-func (a *App) syncPreviewContent() {
-sel := a.noteList.SelectedItem()
-if sel == nil {
-if a.lastSelectedPath != "" {
-a.lastSelectedPath = ""
-a.preview.SetContent("", "")
-}
-return
-}
-if sel.Path != a.lastSelectedPath {
-a.lastSelectedPath = sel.Path
+// loadPreview loads the selected note's content into the preview pane.
+func (a *App) loadPreview(sel *components.NoteItem) {
 if a.svc != nil {
-n, err := a.svc.Get(sel.Path)
-if err != nil {
-a.preview.SetContent(sel.Title, fmt.Sprintf("*Error loading note: %s*", err))
+	n, err := a.svc.Get(sel.Path)
+	if err != nil {
+		a.preview.SetContent(sel.Title, fmt.Sprintf("*Error loading note: %s*", err))
+	} else {
+		a.preview.SetContent(sel.Title, n.Content)
+	}
 } else {
-a.preview.SetContent(sel.Title, n.Content)
+	a.preview.SetContent(sel.Title, fmt.Sprintf("# %s\n\n*No service configured*", sel.Title))
 }
-} else {
-placeholder := fmt.Sprintf("# %s\n\nContent preview for **%s** will be loaded here.\n\n"+
-"- Path: `%s`\n- Folder: %s\n",
-sel.Title, sel.Title, sel.Path, sel.Folder)
-a.preview.SetContent(sel.Title, placeholder)
-}
-}
+a.previewedPath = sel.Path
 }
 
 // updateFocusStyles sets the focused state on the preview pane.
@@ -642,6 +649,7 @@ for _, t := range tags {
 lines = append(lines, fmt.Sprintf("- **#%s** (%d notes)", t.Tag, t.Count))
 }
 a.preview.SetContent("Tags", strings.Join(lines, "\n"))
+a.previewedPath = "" // not a note preview
 if !a.preview.Visible() {
 a.preview.Toggle()
 a.resizeComponents()
@@ -752,13 +760,14 @@ helpContent := `# Remember — Commands
 |-----|--------|
 | **:** or **/** | Open command bar |
 | **Tab** | Switch focus / autocomplete |
-| **p** | Toggle preview pane |
+| **p** | Preview selected note |
 | **j/k** | Navigate list |
 | **Enter** | Open selected note |
 | **Esc** | Close command bar |
 | **q** | Quit |
 `
 a.preview.SetContent("Help", helpContent)
+a.previewedPath = "" // not a note preview
 if !a.preview.Visible() {
 a.preview.Toggle()
 a.resizeComponents()
