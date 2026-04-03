@@ -160,10 +160,10 @@ func TestCommitAll_NewFiles(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if commit.Message != "remember: add notes" {
+	if commit.Message != "memoria: add notes" {
 		t.Fatalf("unexpected commit message: %q", commit.Message)
 	}
-	if commit.Author.Name != "remember" || commit.Author.Email != "remember@local" {
+	if commit.Author.Name != "memoria" || commit.Author.Email != "memoria@local" {
 		t.Fatalf("unexpected author: %s <%s>", commit.Author.Name, commit.Author.Email)
 	}
 }
@@ -397,7 +397,7 @@ func TestCommitAndPush_NoRemote(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if commit.Message != "remember: auto save" {
+	if commit.Message != "memoria: auto save" {
 		t.Fatalf("unexpected message: %q", commit.Message)
 	}
 }

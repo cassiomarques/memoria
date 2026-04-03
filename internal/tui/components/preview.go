@@ -8,7 +8,7 @@ import (
 	"charm.land/bubbles/v2/viewport"
 	glamour "charm.land/glamour/v2"
 	"charm.land/lipgloss/v2"
-	"github.com/cassiomarques/remember/internal/tui/theme"
+	"github.com/cassiomarques/memoria/internal/tui/theme"
 )
 
 const placeholderText = "Press p to preview a note"

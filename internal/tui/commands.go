@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/cassiomarques/remember/internal/tui/components"
+	"github.com/cassiomarques/memoria/internal/tui/components"
 )
 
 // Command represents a parsed user command.

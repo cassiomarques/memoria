@@ -7,10 +7,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cassiomarques/remember/internal/editor"
-	"github.com/cassiomarques/remember/internal/git"
-	"github.com/cassiomarques/remember/internal/search"
-	"github.com/cassiomarques/remember/internal/storage"
+	"github.com/cassiomarques/memoria/internal/editor"
+	"github.com/cassiomarques/memoria/internal/git"
+	"github.com/cassiomarques/memoria/internal/search"
+	"github.com/cassiomarques/memoria/internal/storage"
 )
 
 // setupService creates a fully wired NoteService backed by temp directories,

@@ -6,13 +6,13 @@ import (
 	"path/filepath"
 
 	tea "charm.land/bubbletea/v2"
-	"github.com/cassiomarques/remember/internal/config"
-	"github.com/cassiomarques/remember/internal/editor"
-	"github.com/cassiomarques/remember/internal/git"
-	"github.com/cassiomarques/remember/internal/search"
-	"github.com/cassiomarques/remember/internal/service"
-	"github.com/cassiomarques/remember/internal/storage"
-	"github.com/cassiomarques/remember/internal/tui"
+	"github.com/cassiomarques/memoria/internal/config"
+	"github.com/cassiomarques/memoria/internal/editor"
+	"github.com/cassiomarques/memoria/internal/git"
+	"github.com/cassiomarques/memoria/internal/search"
+	"github.com/cassiomarques/memoria/internal/service"
+	"github.com/cassiomarques/memoria/internal/storage"
+	"github.com/cassiomarques/memoria/internal/tui"
 )
 
 var version = "dev"

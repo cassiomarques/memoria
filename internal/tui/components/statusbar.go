@@ -6,7 +6,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
-	"github.com/cassiomarques/remember/internal/tui/theme"
+	"github.com/cassiomarques/memoria/internal/tui/theme"
 )
 
 // StatusBar displays folder path, tag filter, sync status, and note count.

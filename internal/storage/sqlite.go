@@ -5,7 +5,7 @@ import (
 	"errors"
 	"time"
 
-	"github.com/cassiomarques/remember/internal/note"
+	"github.com/cassiomarques/memoria/internal/note"
 	_ "modernc.org/sqlite"
 )
 

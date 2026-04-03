@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/cassiomarques/remember/internal/note"
+	"github.com/cassiomarques/memoria/internal/note"
 )
 
 // FileStore implements note storage backed by the local filesystem.

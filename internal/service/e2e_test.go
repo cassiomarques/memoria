@@ -11,7 +11,7 @@ import (
 	gogit "github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing/object"
 
-	"github.com/cassiomarques/remember/internal/storage"
+	"github.com/cassiomarques/memoria/internal/storage"
 )
 
 // countCommits opens the git repo at root and returns the number of commits.

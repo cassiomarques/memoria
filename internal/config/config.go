@@ -20,7 +20,7 @@ type Config struct {
 func DefaultConfig() *Config {
 	home, _ := os.UserHomeDir()
 	return &Config{
-		NotesDir: filepath.Join(home, ".remember", "notes"),
+		NotesDir: filepath.Join(home, ".memoria", "notes"),
 	}
 }
 
@@ -85,13 +85,13 @@ func (c *Config) ResolveNotesDir() (string, error) {
 	return filepath.Abs(dir)
 }
 
-// DefaultConfigDir returns the default configuration directory (~/.remember), expanded.
+// DefaultConfigDir returns the default configuration directory (~/.memoria), expanded.
 func DefaultConfigDir() string {
 	home, _ := os.UserHomeDir()
-	return filepath.Join(home, ".remember")
+	return filepath.Join(home, ".memoria")
 }
 
-// DefaultConfigPath returns the default configuration file path (~/.remember/config.yaml), expanded.
+// DefaultConfigPath returns the default configuration file path (~/.memoria/config.yaml), expanded.
 func DefaultConfigPath() string {
 	return filepath.Join(DefaultConfigDir(), "config.yaml")
 }

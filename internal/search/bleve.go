@@ -7,7 +7,7 @@ import (
 	"github.com/blevesearch/bleve/v2"
 	"github.com/blevesearch/bleve/v2/mapping"
 	"github.com/blevesearch/bleve/v2/search/query"
-	"github.com/cassiomarques/remember/internal/note"
+	"github.com/cassiomarques/memoria/internal/note"
 )
 
 // SearchIndex wraps a Bleve index for full-text search of notes.

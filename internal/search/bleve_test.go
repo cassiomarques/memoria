@@ -3,7 +3,7 @@ package search
 import (
 	"testing"
 
-	"github.com/cassiomarques/remember/internal/note"
+	"github.com/cassiomarques/memoria/internal/note"
 )
 
 func newTestNote(t *testing.T, path, content string, tags []string) *note.Note {

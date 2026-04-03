@@ -8,9 +8,9 @@ import (
 
 tea "charm.land/bubbletea/v2"
 "charm.land/lipgloss/v2"
-"github.com/cassiomarques/remember/internal/service"
-"github.com/cassiomarques/remember/internal/tui/components"
-"github.com/cassiomarques/remember/internal/tui/theme"
+"github.com/cassiomarques/memoria/internal/service"
+"github.com/cassiomarques/memoria/internal/tui/components"
+"github.com/cassiomarques/memoria/internal/tui/theme"
 )
 
 // focusedPane tracks which pane currently has keyboard focus.

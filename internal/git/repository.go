@@ -83,10 +83,10 @@ func (r *Repository) CommitAll(message string) error {
 		return nil
 	}
 
-	_, err = wt.Commit("remember: "+message, &gogit.CommitOptions{
+	_, err = wt.Commit("memoria: "+message, &gogit.CommitOptions{
 		Author: &object.Signature{
-			Name:  "remember",
-			Email: "remember@local",
+			Name:  "memoria",
+			Email: "memoria@local",
 			When:  time.Now(),
 		},
 		AllowEmptyCommits: false,
@@ -126,7 +126,7 @@ func (r *Repository) SetRemote(name string, url string) error {
 // It preserves any non-.git files that don't conflict with the clone.
 func (r *Repository) CloneFrom(url string) error {
 	// Clone into a temp directory first
-	tmpDir, err := os.MkdirTemp(filepath.Dir(r.path), ".remember-clone-*")
+	tmpDir, err := os.MkdirTemp(filepath.Dir(r.path), ".memoria-clone-*")
 	if err != nil {
 		return fmt.Errorf("creating temp dir: %w", err)
 	}

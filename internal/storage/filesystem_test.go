@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cassiomarques/remember/internal/note"
+	"github.com/cassiomarques/memoria/internal/note"
 )
 
 func mustNewNote(t *testing.T, path, content string, tags []string) *note.Note {

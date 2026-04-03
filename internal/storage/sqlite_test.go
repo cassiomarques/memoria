@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cassiomarques/remember/internal/note"
+	"github.com/cassiomarques/memoria/internal/note"
 )
 
 func newTestStore(t *testing.T) *MetaStore {

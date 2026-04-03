@@ -6,7 +6,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"charm.land/bubbles/v2/textinput"
 	"charm.land/lipgloss/v2"
-	"github.com/cassiomarques/remember/internal/tui/theme"
+	"github.com/cassiomarques/memoria/internal/tui/theme"
 )
 
 // CommandBar is a text input bar at the bottom of the screen.

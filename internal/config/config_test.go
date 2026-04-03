@@ -15,7 +15,7 @@ func TestDefaultConfig(t *testing.T) {
 		t.Fatalf("could not get home dir: %v", err)
 	}
 
-	expectedNotesDir := filepath.Join(home, ".remember", "notes")
+	expectedNotesDir := filepath.Join(home, ".memoria", "notes")
 	if cfg.NotesDir != expectedNotesDir {
 		t.Errorf("NotesDir = %q, want %q", cfg.NotesDir, expectedNotesDir)
 	}
@@ -245,8 +245,8 @@ func TestResolveNotesDir(t *testing.T) {
 		},
 		{
 			name: "tilde with nested path",
-			dir:  "~/.remember/notes",
-			want: filepath.Join(home, ".remember", "notes"),
+			dir:  "~/.memoria/notes",
+			want: filepath.Join(home, ".memoria", "notes"),
 		},
 	}
 
@@ -271,7 +271,7 @@ func TestDefaultConfigDir(t *testing.T) {
 	}
 
 	got := DefaultConfigDir()
-	want := filepath.Join(home, ".remember")
+	want := filepath.Join(home, ".memoria")
 	if got != want {
 		t.Errorf("DefaultConfigDir() = %q, want %q", got, want)
 	}
@@ -284,7 +284,7 @@ func TestDefaultConfigPath(t *testing.T) {
 	}
 
 	got := DefaultConfigPath()
-	want := filepath.Join(home, ".remember", "config.yaml")
+	want := filepath.Join(home, ".memoria", "config.yaml")
 	if got != want {
 		t.Errorf("DefaultConfigPath() = %q, want %q", got, want)
 	}

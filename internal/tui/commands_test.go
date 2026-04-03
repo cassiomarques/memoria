@@ -4,7 +4,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cassiomarques/remember/internal/tui/components"
+	"github.com/cassiomarques/memoria/internal/tui/components"
 )
 
 func TestParseCommand(t *testing.T) {

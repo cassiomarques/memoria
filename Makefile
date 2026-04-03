@@ -1,7 +1,7 @@
-BINARY_NAME=remember
+BINARY_NAME=memoria
 BUILD_DIR=bin
-MODULE=github.com/cassiomarques/remember
-MAIN=./cmd/remember
+MODULE=github.com/cassiomarques/memoria
+MAIN=./cmd/memoria
 VERSION ?= dev
 LDFLAGS = -s -w -X main.version=$(VERSION)
 

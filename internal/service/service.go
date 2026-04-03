@@ -6,11 +6,11 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/cassiomarques/remember/internal/editor"
-	"github.com/cassiomarques/remember/internal/git"
-	"github.com/cassiomarques/remember/internal/note"
-	"github.com/cassiomarques/remember/internal/search"
-	"github.com/cassiomarques/remember/internal/storage"
+	"github.com/cassiomarques/memoria/internal/editor"
+	"github.com/cassiomarques/memoria/internal/git"
+	"github.com/cassiomarques/memoria/internal/note"
+	"github.com/cassiomarques/memoria/internal/search"
+	"github.com/cassiomarques/memoria/internal/storage"
 )
 
 // NoteService orchestrates all note operations across the filesystem,

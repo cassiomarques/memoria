@@ -1,4 +1,4 @@
-module github.com/cassiomarques/remember
+module github.com/cassiomarques/memoria
 
 go 1.25.8
 
