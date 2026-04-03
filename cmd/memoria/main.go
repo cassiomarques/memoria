@@ -18,10 +18,30 @@ import (
 var version = "dev"
 
 func main() {
-// Handle --version flag
-if len(os.Args) > 1 && (os.Args[1] == "--version" || os.Args[1] == "-v") {
-	fmt.Printf("memoria %s\n", version)
-	os.Exit(0)
+// Handle flags before anything else
+var homeDir string
+args := os.Args[1:]
+for i := 0; i < len(args); i++ {
+	switch args[i] {
+	case "--version", "-v":
+		fmt.Printf("memoria %s\n", version)
+		os.Exit(0)
+	case "--home":
+		if i+1 >= len(args) {
+			fmt.Fprintln(os.Stderr, "Error: --home requires a directory path")
+			os.Exit(1)
+		}
+		homeDir = args[i+1]
+		i++
+	}
+}
+
+// Override config dir if --home was provided
+if homeDir != "" {
+	if err := config.SetConfigDir(homeDir); err != nil {
+		fmt.Fprintf(os.Stderr, "Error: invalid --home path: %v\n", err)
+		os.Exit(1)
+	}
 }
 
 // Load config (creates default if not found)

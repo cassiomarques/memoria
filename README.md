@@ -55,6 +55,17 @@ memoria
 #   ~/.memoria/search.bleve/   — search index
 ```
 
+### Using a custom home directory
+
+Use `--home` to run memoria with a completely isolated data directory:
+
+```bash
+# Great for demos, testing, or separate note collections
+memoria --home ~/demo-notes
+```
+
+This creates config, notes, database, and search index all under `~/demo-notes/` instead of `~/.memoria/`.
+
 ### Set up git sync (optional but recommended)
 
 Create a private repository on GitHub (or any git host), then inside memoria:

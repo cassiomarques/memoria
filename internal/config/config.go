@@ -18,9 +18,8 @@ type Config struct {
 
 // DefaultConfig returns a Config with sensible defaults.
 func DefaultConfig() *Config {
-	home, _ := os.UserHomeDir()
 	return &Config{
-		NotesDir: filepath.Join(home, ".memoria", "notes"),
+		NotesDir: filepath.Join(DefaultConfigDir(), "notes"),
 	}
 }
 
@@ -86,10 +85,34 @@ func (c *Config) ResolveNotesDir() (string, error) {
 }
 
 // DefaultConfigDir returns the default configuration directory (~/.memoria), expanded.
+// If overrideDir is set (via SetConfigDir), it returns that instead.
 func DefaultConfigDir() string {
+	if configDirOverride != "" {
+		return configDirOverride
+	}
 	home, _ := os.UserHomeDir()
 	return filepath.Join(home, ".memoria")
 }
+
+// SetConfigDir overrides the default config directory.
+// Call this before any other config functions.
+func SetConfigDir(dir string) error {
+	if dir == "~" || strings.HasPrefix(dir, "~/") {
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return err
+		}
+		dir = filepath.Join(home, dir[1:])
+	}
+	abs, err := filepath.Abs(dir)
+	if err != nil {
+		return err
+	}
+	configDirOverride = abs
+	return nil
+}
+
+var configDirOverride string
 
 // DefaultConfigPath returns the default configuration file path (~/.memoria/config.yaml), expanded.
 func DefaultConfigPath() string {
