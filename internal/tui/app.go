@@ -812,12 +812,12 @@ return nil
 }
 
 err := a.svc.Move(args[0], args[1])
+_ = a.refreshNoteList()
 if err != nil {
 a.setMessage("Move failed: "+err.Error(), true)
-return nil
+return clearMessageCmd()
 }
 
-_ = a.refreshNoteList()
 a.setMessage(fmt.Sprintf("Moved %s → %s", args[0], args[1]), false)
 return nil
 }

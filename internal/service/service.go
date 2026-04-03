@@ -225,7 +225,26 @@ func (s *NoteService) DeleteFolder(folder string) (int, error) {
 // Move renames/moves a note across all stores.
 func (s *NoteService) Move(oldPath, newPath string) error {
 	oldPath = ensureMD(oldPath)
-	newPath = ensureMD(newPath)
+
+	// If newPath is a directory (trailing slash, or existing dir on disk, or no .md extension
+	// and not already containing a filename-like base), append the original filename.
+	isDir := strings.HasSuffix(newPath, "/")
+	if !isDir && s.files != nil {
+		// Check if the path is an existing directory on disk
+		info, err := os.Stat(s.files.AbsPath(newPath))
+		if err == nil && info.IsDir() {
+			isDir = true
+		}
+	}
+	if isDir {
+		newPath = strings.TrimSuffix(newPath, "/") + "/" + filepath.Base(oldPath)
+	} else {
+		newPath = ensureMD(newPath)
+	}
+
+	if newPath == oldPath {
+		return nil
+	}
 
 	if err := s.files.Move(oldPath, newPath); err != nil {
 		return fmt.Errorf("moving file: %w", err)
@@ -385,6 +404,22 @@ func (s *NoteService) Sync() error {
 	notes, err := s.files.ListAll()
 	if err != nil {
 		return fmt.Errorf("listing all notes: %w", err)
+	}
+
+	// Build set of paths that exist on disk
+	diskPaths := make(map[string]bool, len(notes))
+	for _, n := range notes {
+		diskPaths[n.Path] = true
+	}
+
+	// Remove stale metadata entries for files no longer on disk
+	allMeta, err := s.meta.ListAll()
+	if err == nil {
+		for _, m := range allMeta {
+			if !diskPaths[m.Path] {
+				_ = s.meta.DeleteNote(m.Path)
+			}
+		}
 	}
 
 	for _, n := range notes {

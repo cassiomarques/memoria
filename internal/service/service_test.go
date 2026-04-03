@@ -247,6 +247,102 @@ func TestMove(t *testing.T) {
 	}
 }
 
+func TestMove_DestinationIsFolder(t *testing.T) {
+	svc := setupService(t)
+
+	_, err := svc.Create("my-note.md", "Content here", nil)
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+
+	// Move to a folder path (trailing slash) — should keep original filename
+	if err := svc.Move("my-note.md", "archive/"); err != nil {
+		t.Fatalf("Move: %v", err)
+	}
+
+	// Old path gone
+	if svc.files.Exists("my-note.md") {
+		t.Error("old path still exists on disk")
+	}
+
+	// New path should be archive/my-note.md
+	if !svc.files.Exists("archive/my-note.md") {
+		t.Error("expected archive/my-note.md to exist")
+	}
+	nm, err := svc.meta.GetNote("archive/my-note.md")
+	if err != nil {
+		t.Fatalf("GetNote: %v", err)
+	}
+	if nm.Folder != "archive" {
+		t.Errorf("expected folder 'archive', got %q", nm.Folder)
+	}
+}
+
+func TestMove_DestinationIsExistingFolder(t *testing.T) {
+	svc := setupService(t)
+
+	// Create a note in a folder so the folder exists on disk
+	_, err := svc.Create("target/existing.md", "Existing", nil)
+	if err != nil {
+		t.Fatalf("Create existing: %v", err)
+	}
+
+	// Create the note we want to move
+	_, err = svc.Create("moveme.md", "Move me", nil)
+	if err != nil {
+		t.Fatalf("Create moveme: %v", err)
+	}
+
+	// Move to "target" (no trailing slash) — should detect existing dir
+	if err := svc.Move("moveme.md", "target"); err != nil {
+		t.Fatalf("Move: %v", err)
+	}
+
+	if svc.files.Exists("moveme.md") {
+		t.Error("old path still exists")
+	}
+	if !svc.files.Exists("target/moveme.md") {
+		t.Error("expected target/moveme.md to exist")
+	}
+	// Original note in target should still be there
+	if !svc.files.Exists("target/existing.md") {
+		t.Error("existing note in target folder was lost")
+	}
+}
+
+func TestMove_UnnestToParentFolder(t *testing.T) {
+	svc := setupService(t)
+
+	// Create a nested note: Personal/Projects/my_file.md
+	_, err := svc.Create("Personal/Projects/my_file.md", "Nested note", nil)
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+
+	// Move to parent: Personal/ (trailing slash)
+	if err := svc.Move("Personal/Projects/my_file.md", "Personal/"); err != nil {
+		t.Fatalf("Move: %v", err)
+	}
+
+	// Old path gone
+	if svc.files.Exists("Personal/Projects/my_file.md") {
+		t.Error("old path still exists")
+	}
+
+	// New path should be Personal/my_file.md
+	if !svc.files.Exists("Personal/my_file.md") {
+		t.Error("expected Personal/my_file.md to exist")
+	}
+
+	nm, err := svc.meta.GetNote("Personal/my_file.md")
+	if err != nil {
+		t.Fatalf("GetNote: %v", err)
+	}
+	if nm.Folder != "Personal" {
+		t.Errorf("expected folder 'Personal', got %q", nm.Folder)
+	}
+}
+
 func TestAddTags(t *testing.T) {
 	svc := setupService(t)
 
