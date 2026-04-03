@@ -1,4 +1,0 @@
-fdc381f8327ce4dd25e743d2f526e0e9c3ed1581429e9e15de7579c46301b55b  memoria_0.0.0-SNAPSHOT-0bc9bc7_darwin_amd64.tar.gz
-9f08ecd6c969072f2f1d424f38c99d2bb292b883bc2290b1e8edf60228437a14  memoria_0.0.0-SNAPSHOT-0bc9bc7_darwin_arm64.tar.gz
-904efe79851df378077391e896c6a2c0b9f4f9fad1ea430ab89ff9686dc9ca3d  memoria_0.0.0-SNAPSHOT-0bc9bc7_linux_amd64.tar.gz
-4b104b3e9eb87d24f8f2eb77304ba0b170665937fd37e2a49e45a84b3717c4f9  memoria_0.0.0-SNAPSHOT-0bc9bc7_linux_arm64.tar.gz

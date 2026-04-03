@@ -4,3 +4,4 @@ coverage.html
 *.test
 .DS_Store
 memoria
+dist/
