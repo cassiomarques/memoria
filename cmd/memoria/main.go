@@ -18,6 +18,12 @@ import (
 var version = "dev"
 
 func main() {
+// Handle --version flag
+if len(os.Args) > 1 && (os.Args[1] == "--version" || os.Args[1] == "-v") {
+	fmt.Printf("memoria %s\n", version)
+	os.Exit(0)
+}
+
 // Load config (creates default if not found)
 cfg, err := config.Load(config.DefaultConfigPath())
 if err != nil {
