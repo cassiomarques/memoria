@@ -1,6 +1,7 @@
 package components
 
 import (
+	"fmt"
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
@@ -17,6 +18,7 @@ type CommandBar struct {
 	width         int
 	suggestions   []string
 	suggestionIdx int
+	showMenu      bool   // whether the suggestion menu is visible
 	customLabel   string // overrides "CMD" badge when non-empty
 }
 
@@ -91,34 +93,82 @@ func (c *CommandBar) SetSuggestions(suggestions []string) {
 	c.suggestionIdx = -1
 }
 
-// CycleSuggestion cycles through suggestions and applies the current one.
-// Returns true if a suggestion was applied.
+// CycleSuggestion shows the suggestion menu on first press, cycles on subsequent presses.
+// Returns true if suggestions are being shown.
 func (c *CommandBar) CycleSuggestion() bool {
 	if len(c.suggestions) == 0 {
 		return false
+	}
+
+	if !c.showMenu {
+		// First tab: show menu, select first item
+		c.showMenu = true
+		c.suggestionIdx = 0
+		return true
+	}
+
+	// Subsequent tabs: cycle forward
+	c.suggestionIdx++
+	if c.suggestionIdx >= len(c.suggestions) {
+		c.suggestionIdx = 0
+	}
+	return true
+}
+
+// PrevSuggestion moves selection up in the suggestion menu.
+func (c *CommandBar) PrevSuggestion() {
+	if !c.showMenu || len(c.suggestions) == 0 {
+		return
+	}
+	c.suggestionIdx--
+	if c.suggestionIdx < 0 {
+		c.suggestionIdx = len(c.suggestions) - 1
+	}
+}
+
+// NextSuggestion moves selection down in the suggestion menu.
+func (c *CommandBar) NextSuggestion() {
+	if !c.showMenu || len(c.suggestions) == 0 {
+		return
 	}
 	c.suggestionIdx++
 	if c.suggestionIdx >= len(c.suggestions) {
 		c.suggestionIdx = 0
 	}
+}
+
+// AcceptSuggestion applies the currently selected suggestion to the input.
+// Returns true if a suggestion was applied.
+func (c *CommandBar) AcceptSuggestion() bool {
+	if !c.showMenu || len(c.suggestions) == 0 || c.suggestionIdx < 0 {
+		return false
+	}
 
 	suggestion := c.suggestions[c.suggestionIdx]
-
-	// Replace the last "word" in the input with the suggestion.
-	// For partial command names, replace the whole input.
-	// For arguments, replace the last token after the command.
 	val := c.input.Value()
-	spaceIdx := strings.LastIndex(val, " ")
-	if spaceIdx == -1 {
-		// Completing a command name
+
+	// Find the first space (command separator).
+	// Replace everything after "command " with the suggestion.
+	firstSpace := strings.Index(val, " ")
+	if firstSpace == -1 {
 		c.input.SetValue(suggestion)
 	} else {
-		// Completing an argument
-		c.input.SetValue(val[:spaceIdx+1] + suggestion)
+		c.input.SetValue(val[:firstSpace+1] + suggestion)
 	}
-	// Move cursor to end
 	c.input.CursorEnd()
+	c.DismissMenu()
 	return true
+}
+
+// DismissMenu hides the suggestion menu without applying.
+func (c *CommandBar) DismissMenu() {
+	c.showMenu = false
+	c.suggestionIdx = -1
+}
+
+// ShowingMenu reports whether the suggestion menu is visible.
+func (c CommandBar) ShowingMenu() bool {
+	return c.showMenu && len(c.suggestions) > 0
 }
 
 func (c CommandBar) Init() tea.Cmd { return nil }
@@ -154,21 +204,95 @@ func (c CommandBar) View() string {
 		Render(badgeText)
 
 	inputView := c.input.View()
+	inputLine := style.Render(label + " " + inputView)
 
-	// Show ghost suggestion text
+	// Render suggestion menu above the input line
+	if c.showMenu && len(c.suggestions) > 0 {
+		menuStyle := lipgloss.NewStyle().
+			Background(theme.ColorSurface0).
+			Foreground(theme.ColorText).
+			Padding(0, 1)
+		selectedStyle := lipgloss.NewStyle().
+			Background(theme.ColorMauve).
+			Foreground(theme.ColorCrust).
+			Bold(true).
+			Padding(0, 1)
+
+		maxVisible := 8
+		items := c.suggestions
+		if len(items) > maxVisible {
+			// Show a window around the selected item
+			start := c.suggestionIdx - maxVisible/2
+			if start < 0 {
+				start = 0
+			}
+			end := start + maxVisible
+			if end > len(items) {
+				end = len(items)
+				start = end - maxVisible
+				if start < 0 {
+					start = 0
+				}
+			}
+			items = items[start:end]
+		}
+
+		var menuLines []string
+		for i, s := range items {
+			// Find the actual index in full suggestion list
+			actualIdx := i
+			if len(c.suggestions) > maxVisible {
+				start := c.suggestionIdx - maxVisible/2
+				if start < 0 {
+					start = 0
+				}
+				if start+maxVisible > len(c.suggestions) {
+					start = len(c.suggestions) - maxVisible
+					if start < 0 {
+						start = 0
+					}
+				}
+				actualIdx = start + i
+			}
+
+			if actualIdx == c.suggestionIdx {
+				menuLines = append(menuLines, selectedStyle.Render(s))
+			} else {
+				menuLines = append(menuLines, menuStyle.Render(s))
+			}
+		}
+
+		// Show count if truncated
+		header := ""
+		if len(c.suggestions) > maxVisible {
+			countStyle := lipgloss.NewStyle().
+				Foreground(theme.ColorOverlay0).
+				Padding(0, 1)
+			header = countStyle.Render(fmt.Sprintf("%d/%d", c.suggestionIdx+1, len(c.suggestions)))
+		}
+
+		menu := strings.Join(menuLines, "\n")
+		if header != "" {
+			menu = header + "\n" + menu
+		}
+		return menu + "\n" + inputLine
+	}
+
+	// Show ghost suggestion text when menu is not visible
 	ghost := ""
-	if len(c.suggestions) > 0 && c.suggestionIdx == -1 {
+	if len(c.suggestions) > 0 && !c.showMenu {
 		hint := c.suggestions[0]
 		val := c.input.Value()
-		spaceIdx := strings.LastIndex(val, " ")
-		var prefix string
-		if spaceIdx == -1 {
-			prefix = strings.ToLower(val)
+		// Extract the argument portion (after command name)
+		firstSpace := strings.Index(val, " ")
+		var argPart string
+		if firstSpace == -1 {
+			argPart = strings.ToLower(val)
 		} else {
-			prefix = strings.ToLower(val[spaceIdx+1:])
+			argPart = strings.ToLower(val[firstSpace+1:])
 		}
-		if prefix != "" && strings.HasPrefix(strings.ToLower(hint), prefix) {
-			ghost = hint[len(prefix):]
+		if argPart != "" && strings.HasPrefix(strings.ToLower(hint), argPart) {
+			ghost = hint[len(argPart):]
 		}
 	}
 
@@ -177,5 +301,5 @@ func (c CommandBar) View() string {
 		return style.Render(label + " " + inputView + ghostStyle.Render(ghost))
 	}
 
-	return style.Render(label + " " + inputView)
+	return inputLine
 }

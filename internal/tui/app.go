@@ -78,10 +78,18 @@ styles:      theme.DefaultStyles(),
 }
 }
 
+// AppOptions holds optional configuration for the TUI app.
+type AppOptions struct {
+	ExpandFolders bool
+}
+
 // NewAppWithService creates an App wired to the NoteService, loading initial data.
-func NewAppWithService(svc *service.NoteService) App {
+func NewAppWithService(svc *service.NoteService, opts AppOptions) App {
+noteList := components.NewNoteList()
+noteList.SetExpandAll(opts.ExpandFolders)
+
 a := App{
-noteList:    components.NewNoteList(),
+noteList:    noteList,
 commandBar:  components.NewCommandBar(),
 statusBar:   components.NewStatusBar(),
 preview:     components.NewPreview(),
@@ -243,11 +251,17 @@ case "h", "left":
 // Collapse focused folder, or collapse parent if on a note
 a.noteList.CollapseSelected()
 return a, nil
+case "H":
+a.noteList.CollapseAll()
+return a, nil
 case "l", "right":
 // Expand collapsed folder
 if a.noteList.SelectedIsFolder() && !a.noteList.SelectedIsExpanded() {
 	a.noteList.ExpandSelected()
 }
+return a, nil
+case "L":
+a.noteList.ExpandAll()
 return a, nil
 case "?":
 a.cmdHelp()
@@ -261,6 +275,28 @@ return a, nil
 }
 } else {
 // Command bar is active
+
+// When suggestion menu is showing, intercept navigation keys
+if a.commandBar.ShowingMenu() {
+	switch key {
+	case "esc":
+		a.commandBar.DismissMenu()
+		return a, nil
+	case "tab", "down", "j":
+		a.commandBar.NextSuggestion()
+		return a, nil
+	case "up", "k":
+		a.commandBar.PrevSuggestion()
+		return a, nil
+	case "enter":
+		a.commandBar.AcceptSuggestion()
+		return a, nil
+	default:
+		// Any other key dismisses the menu and falls through to normal input
+		a.commandBar.DismissMenu()
+	}
+}
+
 switch key {
 case "ctrl+c":
 return a, tea.Quit
@@ -984,6 +1020,7 @@ helpContent := `# Remember — Commands
 | **n** | Create a new note (in focused folder) |
 | **j/k** | Navigate list |
 | **h/l, ←/→** | Collapse/expand folder |
+| **H/L** | Collapse/expand all folders |
 | **Enter** | Open note / toggle folder |
 | **?** | Show help |
 | **Esc/q** | Close preview/help |
