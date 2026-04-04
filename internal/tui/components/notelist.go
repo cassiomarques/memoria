@@ -54,6 +54,7 @@ type NoteList struct {
 	width       int
 	styles      theme.Styles
 	expandAll   bool // whether all folders start expanded
+	filterText  string
 
 	// gg detection: true after first 'g' press
 	pendingG bool
@@ -326,12 +327,18 @@ func (n *NoteList) moveDown() {
 	}
 }
 
+// MoveDown moves the cursor down by one item (public, for use by App in filter mode).
+func (n *NoteList) MoveDown() { n.moveDown() }
+
 func (n *NoteList) moveUp() {
 	if n.cursor > 0 {
 		n.cursor--
 		n.ensureVisible()
 	}
 }
+
+// MoveUp moves the cursor up by one item (public, for use by App in filter mode).
+func (n *NoteList) MoveUp() { n.moveUp() }
 
 func (n *NoteList) moveToBottom() {
 	if len(n.flatVisible) > 0 {
@@ -610,4 +617,168 @@ func humanizeTitle(title string) string {
 		}
 	}
 	return strings.Join(words, " ")
+}
+
+// fuzzyMatch returns true if every character in pattern appears (in order,
+// case-insensitive) somewhere in target. When it matches it also returns a
+// score — lower is better. Consecutive matching characters and matches at
+// word boundaries score better.
+func fuzzyMatch(pattern, target string) (bool, int) {
+	if pattern == "" {
+		return true, 0
+	}
+
+	pLower := strings.ToLower(pattern)
+	tLower := strings.ToLower(target)
+
+	pi := 0
+	score := 0
+	prevMatchIdx := -1
+
+	for ti := 0; ti < len(tLower) && pi < len(pLower); ti++ {
+		if tLower[ti] == pLower[pi] {
+			// Bonus for consecutive matches
+			if prevMatchIdx >= 0 && ti == prevMatchIdx+1 {
+				score -= 5
+			}
+			// Bonus for match at start or after a word boundary
+			if ti == 0 || tLower[ti-1] == ' ' || tLower[ti-1] == '/' || tLower[ti-1] == '_' || tLower[ti-1] == '-' {
+				score -= 3
+			}
+			// Penalty proportional to distance from last match
+			if prevMatchIdx >= 0 {
+				score += ti - prevMatchIdx - 1
+			}
+			prevMatchIdx = ti
+			pi++
+		}
+	}
+
+	if pi < len(pLower) {
+		return false, 0
+	}
+	return true, score
+}
+
+// NoteMatchesFilter checks whether a NoteItem matches the filter pattern.
+// It fuzzy-matches against the title, folder path, and tags, returning the
+// best (lowest) score found.
+func NoteMatchesFilter(item *NoteItem, pattern string) (bool, int) {
+	bestScore := int(^uint(0) >> 1) // max int
+	matched := false
+
+	if ok, s := fuzzyMatch(pattern, item.Title); ok {
+		matched = true
+		if s < bestScore {
+			bestScore = s
+		}
+	}
+	if ok, s := fuzzyMatch(pattern, item.Path); ok {
+		matched = true
+		if s < bestScore {
+			bestScore = s
+		}
+	}
+	if ok, s := fuzzyMatch(pattern, item.Folder); ok {
+		matched = true
+		if s < bestScore {
+			bestScore = s
+		}
+	}
+	for _, tag := range item.Tags {
+		if ok, s := fuzzyMatch(pattern, tag); ok {
+			matched = true
+			if s < bestScore {
+				bestScore = s
+			}
+		}
+	}
+
+	return matched, bestScore
+}
+
+// SetFilter applies a fuzzy filter to the note list. Only notes matching the
+// pattern are shown; folders that contain no matching notes are hidden. An
+// empty pattern restores the full list.
+func (n *NoteList) SetFilter(pattern string) {
+	n.filterText = pattern
+	if pattern == "" {
+		// Restore full list
+		n.tree = buildTree(n.items, n.expandAll)
+		n.flatVisible = nil
+		n.rebuildFlatVisible()
+		n.cursor = 0
+		n.offset = 0
+		return
+	}
+
+	// Filter items and sort by score
+	type scored struct {
+		item  NoteItem
+		score int
+	}
+	var matches []scored
+	for i := range n.items {
+		if ok, s := NoteMatchesFilter(&n.items[i], pattern); ok {
+			matches = append(matches, scored{n.items[i], s})
+		}
+	}
+	sort.Slice(matches, func(i, j int) bool {
+		return matches[i].score < matches[j].score
+	})
+
+	filtered := make([]NoteItem, len(matches))
+	for i, m := range matches {
+		filtered[i] = m.item
+	}
+
+	n.tree = buildTree(filtered, true) // always expand when filtering
+	n.flatVisible = nil
+	n.rebuildFlatVisible()
+	n.cursor = 0
+	n.offset = 0
+}
+
+// SetFilteredItems replaces the displayed items with a pre-filtered set
+// (e.g. from Bleve search) and records the filter text. The original items
+// are preserved so AllItems() still returns the full set.
+func (n *NoteList) SetFilteredItems(items []NoteItem, filterText string) {
+	n.filterText = filterText
+	n.tree = buildTree(items, true)
+	n.flatVisible = nil
+	n.rebuildFlatVisible()
+	n.cursor = 0
+	n.offset = 0
+}
+
+// AllItems returns the full (unfiltered) item list.
+func (n *NoteList) AllItems() []NoteItem {
+	return n.items
+}
+
+// ClearFilter removes any active filter and restores the full note list.
+func (n *NoteList) ClearFilter() {
+	n.SetFilter("")
+}
+
+// IsFiltering returns true when a filter is active.
+func (n NoteList) IsFiltering() bool {
+	return n.filterText != ""
+}
+
+// FilterText returns the current filter pattern.
+func (n NoteList) FilterText() string {
+	return n.filterText
+}
+
+// FilteredCount returns the number of notes (not folders) currently visible.
+// When no filter is active this equals ItemCount().
+func (n *NoteList) FilteredCount() int {
+	count := 0
+	n.walkTree(func(node *treeNode) {
+		if !node.isFolder {
+			count++
+		}
+	})
+	return count
 }

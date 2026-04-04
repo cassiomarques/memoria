@@ -788,3 +788,232 @@ func TestNoteList_CollapseAllThenExpandAll_Roundtrip(t *testing.T) {
 		t.Errorf("expected same count after roundtrip (%d), got %d", fullyExpanded, roundtrip)
 	}
 }
+
+// --- Fuzzy match tests ---
+
+func TestFuzzyMatch_EmptyPattern(t *testing.T) {
+	ok, score := fuzzyMatch("", "anything")
+	if !ok {
+		t.Error("empty pattern should match anything")
+	}
+	if score != 0 {
+		t.Errorf("expected score 0 for empty pattern, got %d", score)
+	}
+}
+
+func TestFuzzyMatch_ExactPrefix(t *testing.T) {
+	ok, _ := fuzzyMatch("run", "running_azure")
+	if !ok {
+		t.Error("prefix should match")
+	}
+}
+
+func TestFuzzyMatch_SubsequenceMatch(t *testing.T) {
+	ok, _ := fuzzyMatch("rz", "running_azure")
+	if !ok {
+		t.Error("subsequence 'rz' should match 'running_azure'")
+	}
+}
+
+func TestFuzzyMatch_CaseInsensitive(t *testing.T) {
+	ok, _ := fuzzyMatch("QA", "qa_report")
+	if !ok {
+		t.Error("case-insensitive match should work")
+	}
+}
+
+func TestFuzzyMatch_NoMatch(t *testing.T) {
+	ok, _ := fuzzyMatch("xyz", "running_azure")
+	if ok {
+		t.Error("'xyz' should not match 'running_azure'")
+	}
+}
+
+func TestFuzzyMatch_ConsecutiveBonusBetterScore(t *testing.T) {
+	_, scoreConsec := fuzzyMatch("run", "running_azure")
+	_, scoreSpread := fuzzyMatch("rua", "running_azure")
+	if scoreConsec >= scoreSpread {
+		t.Errorf("consecutive match (%d) should score better (lower) than spread match (%d)",
+			scoreConsec, scoreSpread)
+	}
+}
+
+func TestFuzzyMatch_WordBoundaryBonus(t *testing.T) {
+	_, scoreStart := fuzzyMatch("az", "running_azure")
+	_, scoreMiddle := fuzzyMatch("zu", "running_azure")
+	if scoreStart >= scoreMiddle {
+		t.Errorf("word-boundary match (%d) should score better (lower) than mid-word (%d)",
+			scoreStart, scoreMiddle)
+	}
+}
+
+// --- NoteList filter tests ---
+
+func TestNoteList_SetFilter_MatchesByTitle(t *testing.T) {
+	nl := NewNoteList()
+	nl.SetItems(sampleItems())
+	nl.SetSize(80, 40)
+
+	nl.SetFilter("azure")
+
+	// Should find "running_azure" note
+	foundAzure := false
+	for i := 0; i < len(nl.flatVisible); i++ {
+		node := nl.flatVisible[i]
+		if !node.isFolder && node.noteItem != nil && node.noteItem.Title == "running_azure" {
+			foundAzure = true
+			break
+		}
+	}
+	if !foundAzure {
+		t.Error("expected to find 'running_azure' note when filtering by 'azure'")
+	}
+}
+
+func TestNoteList_SetFilter_MatchesByTag(t *testing.T) {
+	nl := NewNoteList()
+	nl.SetItems(sampleItems())
+	nl.SetSize(80, 40)
+
+	nl.SetFilter("monitoring")
+
+	found := false
+	for i := 0; i < len(nl.flatVisible); i++ {
+		node := nl.flatVisible[i]
+		if !node.isFolder && node.noteItem != nil && node.noteItem.Title == "datadog_monitors" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Error("expected to find 'datadog_monitors' when filtering by tag 'monitoring'")
+	}
+}
+
+func TestNoteList_SetFilter_ReducesVisibleItems(t *testing.T) {
+	nl := NewNoteList()
+	nl.SetItems(sampleItems())
+	nl.SetSize(80, 40)
+
+	fullCount := visibleNodeCount(&nl)
+
+	nl.SetFilter("qa")
+	filteredCount := visibleNodeCount(&nl)
+
+	if filteredCount >= fullCount {
+		t.Errorf("filtered count (%d) should be less than full count (%d)", filteredCount, fullCount)
+	}
+}
+
+func TestNoteList_SetFilter_EmptyRestoresFullList(t *testing.T) {
+	nl := NewNoteList()
+	nl.SetItems(sampleItems())
+	nl.SetSize(80, 40)
+
+	fullCount := visibleNodeCount(&nl)
+
+	nl.SetFilter("qa")
+	nl.SetFilter("")
+
+	restoredCount := visibleNodeCount(&nl)
+	if restoredCount != fullCount {
+		t.Errorf("expected full count (%d) after clearing filter, got %d", fullCount, restoredCount)
+	}
+}
+
+func TestNoteList_ClearFilter(t *testing.T) {
+	nl := NewNoteList()
+	nl.SetItems(sampleItems())
+	nl.SetSize(80, 40)
+
+	nl.SetFilter("qa")
+	if !nl.IsFiltering() {
+		t.Error("expected IsFiltering() to be true")
+	}
+
+	nl.ClearFilter()
+	if nl.IsFiltering() {
+		t.Error("expected IsFiltering() to be false after ClearFilter")
+	}
+}
+
+func TestNoteList_SetFilter_NoMatches(t *testing.T) {
+	nl := NewNoteList()
+	nl.SetItems(sampleItems())
+	nl.SetSize(80, 40)
+
+	nl.SetFilter("zzzznothing")
+
+	noteCount := 0
+	for _, node := range nl.flatVisible {
+		if !node.isFolder {
+			noteCount++
+		}
+	}
+	if noteCount != 0 {
+		t.Errorf("expected 0 notes for non-matching filter, got %d", noteCount)
+	}
+}
+
+func TestNoteList_SetFilter_FuzzySubsequence(t *testing.T) {
+	nl := NewNoteList()
+	nl.SetItems(sampleItems())
+	nl.SetSize(80, 40)
+
+	// "dg" should fuzzy-match "datadog_monitors" (d...g)
+	nl.SetFilter("dg")
+
+	found := false
+	for _, node := range nl.flatVisible {
+		if !node.isFolder && node.noteItem != nil && node.noteItem.Title == "datadog_monitors" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Error("expected fuzzy match of 'dg' to find 'datadog_monitors'")
+	}
+}
+
+func TestNoteList_FilterText(t *testing.T) {
+	nl := NewNoteList()
+	nl.SetItems(sampleItems())
+
+	if nl.FilterText() != "" {
+		t.Error("expected empty filter text initially")
+	}
+
+	nl.SetFilter("test")
+	if nl.FilterText() != "test" {
+		t.Errorf("expected filter text 'test', got %q", nl.FilterText())
+	}
+
+	nl.ClearFilter()
+	if nl.FilterText() != "" {
+		t.Error("expected empty filter text after clear")
+	}
+}
+
+func TestNoteList_FilteredCount(t *testing.T) {
+	nl := NewNoteList()
+	nl.SetItems(sampleItems())
+	nl.SetSize(80, 40)
+
+	// Unfiltered: all 9 notes
+	if nl.FilteredCount() != 9 {
+		t.Errorf("expected 9 unfiltered notes, got %d", nl.FilteredCount())
+	}
+
+	// "qa" tag matches e2e_stream and qa_report (both in Projects/CodeCoverage)
+	nl.SetFilter("qa")
+	filtered := nl.FilteredCount()
+	if filtered != 2 {
+		t.Errorf("expected 2 notes matching 'qa', got %d", filtered)
+	}
+
+	// Clear restores all
+	nl.ClearFilter()
+	if nl.FilteredCount() != 9 {
+		t.Errorf("expected 9 notes after clear, got %d", nl.FilteredCount())
+	}
+}

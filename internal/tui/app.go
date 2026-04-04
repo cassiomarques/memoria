@@ -64,6 +64,10 @@ type App struct {
 	// Create-in-folder state
 	pendingCreate       bool
 	pendingCreateFolder string // target folder path
+
+	// Fuzzy filter mode (/ key)
+	filterMode bool
+	filterBuf  string // current filter text
 }
 
 // NewApp creates a new App with all sub-components initialized (no service).
@@ -162,6 +166,11 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return a, clearMessageCmd()
 		}
 
+		// Fuzzy filter mode — intercept all keys
+		if a.filterMode {
+			return a.handleFilterKey(key)
+		}
+
 		// Global quit keys (only when command bar is not active)
 		if !a.commandBar.Active() {
 			switch key {
@@ -190,10 +199,16 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					a.statusBar.ClearMessage()
 					return a, nil
 				}
-			case ":", "/":
+			case ":":
 				cmd := a.commandBar.Focus()
 				cmds = append(cmds, cmd)
 				return a, tea.Batch(cmds...)
+			case "/":
+				a.filterMode = true
+				a.filterBuf = ""
+				a.noteList.SetFilter("")
+				a.setMessage("🔍 Type to filter (Esc to cancel)", false)
+				return a, nil
 			case "p":
 				sel := a.noteList.SelectedItem()
 				if sel == nil {
@@ -1012,7 +1027,8 @@ func (a *App) cmdHelp() {
 
 | Key | Action |
 |-----|--------|
-| **:** or **/** | Open command bar |
+| **:** | Open command bar |
+| **/** | Fuzzy filter notes (type to search, ↑/↓ navigate, Enter open, Esc cancel) |
 | **Tab** | Switch focus / autocomplete |
 | **p** | Preview selected note |
 | **e** | Edit previewed note (when preview focused) |
@@ -1065,6 +1081,124 @@ func (a *App) openInEditor(notePath string) tea.Cmd {
 	return tea.ExecProcess(c, func(err error) tea.Msg {
 		return editorFinishedMsg{path: path, err: err}
 	})
+}
+
+// handleFilterKey processes key events while in fuzzy filter mode.
+// All printable keys go to the filter input; only arrows navigate results.
+func (a App) handleFilterKey(key string) (tea.Model, tea.Cmd) {
+	switch key {
+	case "esc":
+		a.filterMode = false
+		a.filterBuf = ""
+		a.noteList.ClearFilter()
+		_ = a.refreshNoteList()
+		a.statusBar.ClearMessage()
+		return a, nil
+	case "enter":
+		sel := a.noteList.SelectedItem()
+		a.filterMode = false
+		a.filterBuf = ""
+		a.noteList.ClearFilter()
+		_ = a.refreshNoteList()
+		a.statusBar.ClearMessage()
+		if sel != nil && a.svc != nil {
+			cmd := a.openInEditor(sel.Path)
+			return a, cmd
+		}
+		return a, nil
+	case "ctrl+c":
+		return a, tea.Quit
+	case "backspace":
+		if len(a.filterBuf) > 0 {
+			a.filterBuf = a.filterBuf[:len(a.filterBuf)-1]
+			a.applyFilter()
+		}
+		return a, nil
+	case "down":
+		a.noteList.MoveDown()
+		return a, nil
+	case "up":
+		a.noteList.MoveUp()
+		return a, nil
+	default:
+		// Append printable characters to the filter buffer
+		switch {
+		case key == "space":
+			a.filterBuf += " "
+		case len(key) == 1 && key[0] >= 32:
+			a.filterBuf += key
+		default:
+			return a, nil
+		}
+		a.applyFilter()
+		return a, nil
+	}
+}
+
+// applyFilter runs the combined filter: Bleve content search + in-memory
+// fuzzy match on title/path/folder/tags, merged and deduped.
+func (a *App) applyFilter() {
+	if a.filterBuf == "" {
+		a.noteList.ClearFilter()
+		_ = a.refreshNoteList()
+		a.updateFilterStatus()
+		return
+	}
+
+	seen := make(map[string]bool)
+	var items []components.NoteItem
+
+	// Phase 1: Bleve full-text search (searches note content, title, tags, folder)
+	if a.svc != nil {
+		results, err := a.svc.SearchFuzzy(a.filterBuf, 50)
+		if err == nil {
+			for _, r := range results {
+				if seen[r.Path] {
+					continue
+				}
+				n, err := a.svc.Get(r.Path)
+				if err != nil {
+					continue
+				}
+				seen[r.Path] = true
+				items = append(items, components.NoteItem{
+					Path:     n.Path,
+					Title:    n.Title,
+					Folder:   n.Folder,
+					Tags:     n.Tags,
+					Modified: n.Modified,
+				})
+			}
+		}
+	}
+
+	// Phase 2: in-memory fuzzy match on title/path/folder/tags (catches
+	// structural matches Bleve may miss, e.g. folder name subsequences)
+	allItems := a.noteList.AllItems()
+	for i := range allItems {
+		item := &allItems[i]
+		if seen[item.Path] {
+			continue
+		}
+		if ok, _ := components.NoteMatchesFilter(item, a.filterBuf); ok {
+			seen[item.Path] = true
+			items = append(items, *item)
+		}
+	}
+
+	a.noteList.SetFilteredItems(items, a.filterBuf)
+	a.updateFilterStatus()
+}
+
+func (a *App) updateFilterStatus() {
+	if a.filterBuf == "" {
+		a.statusBar.ClearMessage()
+		return
+	}
+	filtered := a.noteList.FilteredCount()
+	total := len(a.noteList.AllItems())
+	msg := fmt.Sprintf("🔍 /%s  (%d/%d notes)", a.filterBuf, filtered, total)
+	a.setMessage(msg, false)
 }
 
 func (a *App) folderDisplay() string {
@@ -1120,16 +1254,43 @@ func (a App) View() tea.View {
 		mainContent = a.noteList.View()
 	}
 
-	// Status bar (messages are now shown inline)
+	// Show filter bar or command bar
+	var barView string
+	if a.filterMode {
+		barView = a.renderFilterBar()
+	} else {
+		barView = a.commandBar.View()
+	}
+
 	statusView := a.statusBar.View()
 
 	content := lipgloss.JoinVertical(lipgloss.Left,
 		mainContent,
-		a.commandBar.View(),
+		barView,
 		statusView,
 	)
 
 	v := tea.NewView(content)
 	v.AltScreen = true
 	return v
+}
+
+func (a App) renderFilterBar() string {
+	prompt := lipgloss.NewStyle().
+		Foreground(theme.ColorMauve).
+		Bold(true).
+		Render("/")
+	text := lipgloss.NewStyle().
+		Foreground(theme.ColorText).
+		Render(a.filterBuf)
+	cursor := lipgloss.NewStyle().
+		Foreground(theme.ColorMauve).
+		Render("▏")
+
+	bar := lipgloss.NewStyle().
+		Width(a.width).
+		Padding(0, 1).
+		Background(theme.ColorSurface0).
+		Render(prompt + text + cursor)
+	return bar
 }
