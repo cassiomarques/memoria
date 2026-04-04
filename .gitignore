@@ -3,5 +3,5 @@ coverage.out
 coverage.html
 *.test
 .DS_Store
-memoria
+/memoria
 dist/
