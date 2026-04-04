@@ -3,6 +3,7 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -309,6 +310,107 @@ func TestEnsureDirs(t *testing.T) {
 	if !info.IsDir() {
 		t.Fatal("notes dir is not a directory")
 	}
+}
+
+func TestAcquireLock_Success(t *testing.T) {
+	dir := t.TempDir()
+
+	release, err := AcquireLock(dir)
+	if err != nil {
+		t.Fatalf("AcquireLock returned error: %v", err)
+	}
+	defer release()
+
+	// Lock file should exist with our PID
+	data, err := os.ReadFile(filepath.Join(dir, "memoria.lock"))
+	if err != nil {
+		t.Fatalf("could not read lock file: %v", err)
+	}
+
+	got := strings.TrimSpace(string(data))
+	want := strconv.Itoa(os.Getpid())
+	if got != want {
+		t.Errorf("lock file PID = %q, want %q", got, want)
+	}
+}
+
+func TestAcquireLock_ReleaseCleansUp(t *testing.T) {
+	dir := t.TempDir()
+
+	release, err := AcquireLock(dir)
+	if err != nil {
+		t.Fatalf("AcquireLock returned error: %v", err)
+	}
+
+	lockPath := filepath.Join(dir, "memoria.lock")
+	if _, err := os.Stat(lockPath); os.IsNotExist(err) {
+		t.Fatal("lock file should exist before release")
+	}
+
+	release()
+
+	if _, err := os.Stat(lockPath); !os.IsNotExist(err) {
+		t.Fatal("lock file should be removed after release")
+	}
+}
+
+func TestAcquireLock_StaleLockOverwritten(t *testing.T) {
+	dir := t.TempDir()
+	lockPath := filepath.Join(dir, "memoria.lock")
+
+	// Write a lock file with a PID that definitely doesn't exist
+	if err := os.WriteFile(lockPath, []byte("999999999"), 0644); err != nil {
+		t.Fatalf("could not write stale lock: %v", err)
+	}
+
+	release, err := AcquireLock(dir)
+	if err != nil {
+		t.Fatalf("AcquireLock should overwrite stale lock, got error: %v", err)
+	}
+	defer release()
+
+	data, _ := os.ReadFile(lockPath)
+	got := strings.TrimSpace(string(data))
+	want := strconv.Itoa(os.Getpid())
+	if got != want {
+		t.Errorf("lock file should have our PID %q, got %q", want, got)
+	}
+}
+
+func TestAcquireLock_AlreadyRunning(t *testing.T) {
+	dir := t.TempDir()
+	lockPath := filepath.Join(dir, "memoria.lock")
+
+	// Use parent PID — it's always alive and not our own PID
+	ppid := os.Getppid()
+	if err := os.WriteFile(lockPath, []byte(strconv.Itoa(ppid)), 0644); err != nil {
+		t.Fatalf("could not write lock: %v", err)
+	}
+
+	_, err := AcquireLock(dir)
+	if err == nil {
+		t.Fatal("AcquireLock should return error when another process holds the lock")
+	}
+
+	if !strings.Contains(err.Error(), "already running") {
+		t.Errorf("error should mention 'already running', got: %v", err)
+	}
+}
+
+func TestAcquireLock_OwnPidAllowed(t *testing.T) {
+	dir := t.TempDir()
+	lockPath := filepath.Join(dir, "memoria.lock")
+
+	// Write our own PID — should be allowed (re-acquire)
+	if err := os.WriteFile(lockPath, []byte(strconv.Itoa(os.Getpid())), 0644); err != nil {
+		t.Fatalf("could not write lock: %v", err)
+	}
+
+	release, err := AcquireLock(dir)
+	if err != nil {
+		t.Fatalf("AcquireLock should allow re-acquire by same PID, got error: %v", err)
+	}
+	defer release()
 }
 
 func TestEnsureDirsExpandsTilde(t *testing.T) {

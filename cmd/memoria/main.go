@@ -57,6 +57,14 @@ fmt.Fprintf(os.Stderr, "Error creating directories: %v\n", err)
 os.Exit(1)
 }
 
+// Acquire instance lock (prevents two instances on the same data dir)
+releaseLock, err := config.AcquireLock(config.DefaultConfigDir())
+if err != nil {
+fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+os.Exit(1)
+}
+defer releaseLock()
+
 // Save default config on first run
 cfgPath := config.DefaultConfigPath()
 if _, err := os.Stat(cfgPath); os.IsNotExist(err) {
@@ -121,7 +129,9 @@ fmt.Fprintf(os.Stderr, "Added frontmatter to %d notes\n", count)
 }
 
 // Create app wired to service
-app := tui.NewAppWithService(svc)
+app := tui.NewAppWithService(svc, tui.AppOptions{
+ExpandFolders: cfg.ResolveExpandFolders(),
+})
 
 // Run Bubble Tea program
 p := tea.NewProgram(app)
