@@ -137,6 +137,8 @@ func sampleNoteItems() []components.NoteItem {
 	return []components.NoteItem{
 		{Path: "work/meeting.md", Title: "meeting", Folder: "work", Tags: []string{"important"}, Modified: time.Now()},
 		{Path: "work/todo.md", Title: "todo", Folder: "work", Tags: []string{"daily"}, Modified: time.Now()},
+		{Path: "work/projects/api.md", Title: "api", Folder: "work/projects", Tags: []string{"dev"}, Modified: time.Now()},
+		{Path: "work/projects/secret plan/roadmap.md", Title: "roadmap", Folder: "work/projects/secret plan", Tags: nil, Modified: time.Now()},
 		{Path: "personal/journal.md", Title: "journal", Folder: "personal", Tags: []string{"daily"}, Modified: time.Now()},
 		{Path: "ideas.md", Title: "ideas", Folder: "", Tags: []string{"creative"}, Modified: time.Now()},
 	}
@@ -186,17 +188,38 @@ func TestCompletions_NotePaths(t *testing.T) {
 	items := sampleNoteItems()
 	tags := sampleTags()
 
-	t.Run("open with empty prefix shows all notes", func(t *testing.T) {
+	t.Run("open with empty prefix shows top-level segments", func(t *testing.T) {
 		results := Completions("open ", items, tags)
-		if len(results) != len(items) {
-			t.Errorf("expected %d results, got %d", len(items), len(results))
+		// Should show: work/, personal/, ideas.md (hierarchical, not all paths)
+		if len(results) != 3 {
+			t.Errorf("expected 3 top-level segments, got %d: %v", len(results), results)
 		}
 	})
 
-	t.Run("open with prefix filters", func(t *testing.T) {
+	t.Run("open with folder prefix shows children", func(t *testing.T) {
 		results := Completions("open work/", items, tags)
+		// Should show: work/meeting.md, work/todo.md, work/projects/
+		if len(results) != 3 {
+			t.Fatalf("expected 3 results, got %d: %v", len(results), results)
+		}
+	})
+
+	t.Run("open with nested folder shows deeper children", func(t *testing.T) {
+		results := Completions("open work/projects/", items, tags)
+		// Should show: work/projects/api.md, work/projects/secret plan/
 		if len(results) != 2 {
 			t.Fatalf("expected 2 results, got %d: %v", len(results), results)
+		}
+	})
+
+	t.Run("open with folder with spaces shows children", func(t *testing.T) {
+		results := Completions("open work/projects/secret plan/", items, tags)
+		// Should show: work/projects/secret plan/roadmap.md
+		if len(results) != 1 {
+			t.Fatalf("expected 1 result, got %d: %v", len(results), results)
+		}
+		if results[0] != "work/projects/secret plan/roadmap.md" {
+			t.Errorf("expected 'work/projects/secret plan/roadmap.md', got %q", results[0])
 		}
 	})
 
@@ -215,30 +238,42 @@ func TestCompletions_Folders(t *testing.T) {
 	items := sampleNoteItems()
 	tags := sampleTags()
 
-	t.Run("cd with empty prefix shows all folders", func(t *testing.T) {
+	t.Run("cd with empty prefix shows top-level folders", func(t *testing.T) {
 		results := Completions("cd ", items, tags)
+		// work/, personal/
 		if len(results) != 2 {
 			t.Fatalf("expected 2 folders, got %d: %v", len(results), results)
 		}
 	})
 
-	t.Run("cd with prefix filters folders", func(t *testing.T) {
+	t.Run("cd with prefix filters folders with trailing slash", func(t *testing.T) {
 		results := Completions("cd w", items, tags)
 		if len(results) != 1 {
 			t.Fatalf("expected 1 folder, got %d: %v", len(results), results)
 		}
-		if results[0] != "work" {
-			t.Errorf("expected 'work', got %q", results[0])
+		if results[0] != "work/" {
+			t.Errorf("expected 'work/', got %q", results[0])
 		}
 	})
 
-	t.Run("new with prefix suggests folders", func(t *testing.T) {
+	t.Run("cd into folder shows subfolders", func(t *testing.T) {
+		results := Completions("cd work/", items, tags)
+		// work/projects/
+		if len(results) != 1 {
+			t.Fatalf("expected 1 subfolder, got %d: %v", len(results), results)
+		}
+		if results[0] != "work/projects/" {
+			t.Errorf("expected 'work/projects/', got %q", results[0])
+		}
+	})
+
+	t.Run("new with prefix suggests folders with trailing slash", func(t *testing.T) {
 		results := Completions("new p", items, tags)
 		if len(results) != 1 {
 			t.Fatalf("expected 1 folder, got %d: %v", len(results), results)
 		}
-		if results[0] != "personal" {
-			t.Errorf("expected 'personal', got %q", results[0])
+		if results[0] != "personal/" {
+			t.Errorf("expected 'personal/', got %q", results[0])
 		}
 	})
 }
@@ -264,17 +299,18 @@ func TestCompletions_Tags(t *testing.T) {
 		}
 	})
 
-	t.Run("tag with no path yet suggests note paths", func(t *testing.T) {
+	t.Run("tag with no path yet suggests top-level segments", func(t *testing.T) {
 		results := Completions("tag ", items, tags)
-		if len(results) != len(items) {
-			t.Errorf("expected %d note paths, got %d", len(items), len(results))
+		// Hierarchical: work/, personal/, ideas.md
+		if len(results) != 3 {
+			t.Errorf("expected 3 top-level segments, got %d: %v", len(results), results)
 		}
 	})
 
 	t.Run("untag with partial path", func(t *testing.T) {
 		results := Completions("untag work/m", items, tags)
 		if len(results) != 1 {
-			t.Fatalf("expected 1 result, got %d", len(results))
+			t.Fatalf("expected 1 result, got %d: %v", len(results), results)
 		}
 	})
 }
@@ -295,17 +331,30 @@ func TestCompletions_Mv(t *testing.T) {
 	items := sampleNoteItems()
 	tags := sampleTags()
 
-	t.Run("mv with no args suggests note paths", func(t *testing.T) {
+	t.Run("mv with no args suggests top-level segments", func(t *testing.T) {
 		results := Completions("mv ", items, tags)
-		if len(results) != len(items) {
-			t.Errorf("expected %d note paths, got %d", len(items), len(results))
+		// Hierarchical: work/, personal/, ideas.md
+		if len(results) != 3 {
+			t.Errorf("expected 3 top-level segments, got %d: %v", len(results), results)
 		}
 	})
 
 	t.Run("mv with one path and space suggests folders", func(t *testing.T) {
 		results := Completions("mv work/meeting.md ", items, tags)
+		// Folders only: work/, personal/
 		if len(results) != 2 {
 			t.Fatalf("expected 2 folders, got %d: %v", len(results), results)
+		}
+	})
+
+	t.Run("mv destination drills into folder", func(t *testing.T) {
+		results := Completions("mv work/meeting.md work/", items, tags)
+		// Subfolders of work: work/projects/
+		if len(results) != 1 {
+			t.Fatalf("expected 1 subfolder, got %d: %v", len(results), results)
+		}
+		if results[0] != "work/projects/" {
+			t.Errorf("expected 'work/projects/', got %q", results[0])
 		}
 	})
 }
