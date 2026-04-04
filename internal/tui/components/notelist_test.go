@@ -66,14 +66,14 @@ func TestNoteList_TreeStructure(t *testing.T) {
 	nl.SetItems(sampleItems())
 	nl.SetSize(80, 40)
 
-	// Level-1 folders expanded, nested folders collapsed.
+	// All folders expanded (default expandAll=true).
 	// Dotcom(folder), Running Azure, Testing Monolith,
 	// Go(folder), Backporting Deps,
-	// Projects(folder), CodeCoverage(folder) [collapsed, hides E2e Stream + Qa Report],
+	// Projects(folder), CodeCoverage(folder), E2e Stream, Qa Report,
 	// Random(folder), Datadog Monitors, Mysql Extended,
 	// Daily, Scratch Notes
-	// = 12 visible
-	expected := 12
+	// = 14 visible
+	expected := 14
 	got := visibleNodeCount(&nl)
 	if got != expected {
 		t.Errorf("expected %d visible nodes, got %d", expected, got)
@@ -384,27 +384,24 @@ func TestNoteList_NestedFolderCollapse(t *testing.T) {
 	for i := 0; i < 5; i++ {
 		nl, _ = nl.Update(simpleKeyPress('j'))
 	}
-	if nl.SelectedItem() != nil {
-		t.Logf("cursor at %d, not a folder, navigating further", nl.Cursor())
-	}
 
 	// Navigate to CodeCoverage folder (next after Projects)
 	nl, _ = nl.Update(simpleKeyPress('j'))
 
 	beforeCount := visibleNodeCount(&nl)
 
-	// CodeCoverage starts collapsed — expand it first
+	// CodeCoverage starts expanded (default) — collapse it first
 	nl, _ = nl.Update(keyPress("enter"))
-	expandedCount := visibleNodeCount(&nl)
-	if expandedCount != beforeCount+2 {
-		t.Errorf("expected %d visible after expanding CodeCoverage, got %d", beforeCount+2, expandedCount)
+	collapsedCount := visibleNodeCount(&nl)
+	if collapsedCount != beforeCount-2 {
+		t.Errorf("expected %d visible after collapsing CodeCoverage, got %d", beforeCount-2, collapsedCount)
 	}
 
-	// Now collapse CodeCoverage
+	// Now expand CodeCoverage again
 	nl, _ = nl.Update(keyPress("enter"))
 	afterCount := visibleNodeCount(&nl)
 	if afterCount != beforeCount {
-		t.Errorf("expected %d visible after collapsing CodeCoverage, got %d", beforeCount, afterCount)
+		t.Errorf("expected %d visible after re-expanding CodeCoverage, got %d", beforeCount, afterCount)
 	}
 }
 
@@ -420,12 +417,12 @@ func TestNoteList_CollapseParentHidesNestedChildren(t *testing.T) {
 		nl, _ = nl.Update(simpleKeyPress('j'))
 	}
 
-	// Collapse Projects — CodeCoverage (collapsed subfolder) is the only visible child = 1 node hidden
+	// Collapse Projects — hides CodeCoverage (subfolder) + its 2 notes = 3 nodes hidden
 	nl, _ = nl.Update(keyPress("enter"))
 
 	afterCount := visibleNodeCount(&nl)
-	if afterCount != beforeCount-1 {
-		t.Errorf("expected %d visible after collapsing Projects, got %d", beforeCount-1, afterCount)
+	if afterCount != beforeCount-3 {
+		t.Errorf("expected %d visible after collapsing Projects, got %d", beforeCount-3, afterCount)
 	}
 }
 
@@ -569,17 +566,16 @@ func TestNoteList_SelectedIsExpanded(t *testing.T) {
 		t.Error("expected top-level folder Dotcom to be expanded")
 	}
 
-	// Navigate to CodeCoverage (cursor 6, nested, starts collapsed)
+	// Navigate to CodeCoverage (cursor 6, nested, starts expanded with expandAll=true)
 	for i := 0; i < 6; i++ {
 		nl, _ = nl.Update(simpleKeyPress('j'))
 	}
-	if nl.SelectedIsExpanded() {
-		t.Error("expected nested folder CodeCoverage to start collapsed")
+	if !nl.SelectedIsExpanded() {
+		t.Error("expected nested folder CodeCoverage to start expanded (expandAll default)")
 	}
 
-	// Navigate to a note
-	nl, _ = nl.Update(simpleKeyPress('j')) // Random folder
-	nl, _ = nl.Update(simpleKeyPress('j')) // Datadog Monitors note
+	// Navigate to a note inside CodeCoverage
+	nl, _ = nl.Update(simpleKeyPress('j')) // E2e Stream note
 	if nl.SelectedIsExpanded() {
 		t.Error("expected false for note")
 	}
@@ -617,10 +613,11 @@ func TestNoteList_CollapseSelectedFromNote(t *testing.T) {
 
 func TestNoteList_ExpandSelected(t *testing.T) {
 	nl := NewNoteList()
+	nl.SetExpandAll(false) // nested folders start collapsed
 	nl.SetItems(sampleItems())
 	nl.SetSize(80, 40)
 
-	beforeCount := visibleNodeCount(&nl) // 12
+	beforeCount := visibleNodeCount(&nl) // 12 (nested collapsed)
 
 	// Navigate to CodeCoverage (cursor 6, collapsed)
 	for i := 0; i < 6; i++ {
@@ -646,6 +643,7 @@ func TestNoteList_ExpandSelected(t *testing.T) {
 
 func TestNoteList_NestedFoldersStartCollapsed(t *testing.T) {
 	nl := NewNoteList()
+	nl.SetExpandAll(false) // explicitly test collapse behavior
 	nl.SetItems(sampleItems())
 	nl.SetSize(80, 40)
 
@@ -680,6 +678,7 @@ func TestNoteList_NestedFoldersStartCollapsed(t *testing.T) {
 
 func TestNoteList_CollapseAlreadyCollapsed(t *testing.T) {
 	nl := NewNoteList()
+	nl.SetExpandAll(false) // nested folders start collapsed
 	nl.SetItems(sampleItems())
 	nl.SetSize(80, 40)
 
@@ -719,4 +718,73 @@ func TestNoteList_ExpandAlreadyExpanded(t *testing.T) {
 	if nl.Cursor() != beforeCursor {
 		t.Errorf("expected cursor to stay at %d, got %d", beforeCursor, nl.Cursor())
 	}
+}
+
+func TestNoteList_ExpandAll(t *testing.T) {
+nl := NewNoteList()
+nl.SetItems(sampleItems())
+nl.SetSize(80, 40)
+
+nl.CollapseAll()
+collapsedCount := visibleNodeCount(&nl)
+
+nl.ExpandAll()
+expandedCount := visibleNodeCount(&nl)
+
+if expandedCount <= collapsedCount {
+t.Errorf("expected more visible nodes after ExpandAll (%d) than after CollapseAll (%d)",
+expandedCount, collapsedCount)
+}
+
+found := false
+for i := 0; i < nl.ItemCount(); i++ {
+item := nl.ItemAt(i)
+if item != nil && item.Folder == "Projects/CodeCoverage" {
+found = true
+break
+}
+}
+if !found {
+t.Error("nested folder items should be visible after ExpandAll")
+}
+}
+
+func TestNoteList_CollapseAll(t *testing.T) {
+nl := NewNoteList()
+nl.SetItems(sampleItems())
+nl.SetSize(80, 40)
+
+beforeCount := visibleNodeCount(&nl)
+
+nl.CollapseAll()
+afterCount := visibleNodeCount(&nl)
+
+if afterCount >= beforeCount {
+t.Errorf("expected fewer visible nodes after CollapseAll (%d) than before (%d)",
+afterCount, beforeCount)
+}
+
+// Only top-level folders and root-level notes should be visible
+// Folders: Dotcom, Go, Projects, Random = 4, Root notes: daily.md, scratch.md = 2
+expected := 6
+if afterCount != expected {
+t.Errorf("expected %d visible nodes after CollapseAll, got %d", expected, afterCount)
+}
+}
+
+func TestNoteList_CollapseAllThenExpandAll_Roundtrip(t *testing.T) {
+nl := NewNoteList()
+nl.SetItems(sampleItems())
+nl.SetSize(80, 40)
+
+nl.ExpandAll()
+fullyExpanded := visibleNodeCount(&nl)
+
+nl.CollapseAll()
+nl.ExpandAll()
+roundtrip := visibleNodeCount(&nl)
+
+if roundtrip != fullyExpanded {
+t.Errorf("expected same count after roundtrip (%d), got %d", fullyExpanded, roundtrip)
+}
 }

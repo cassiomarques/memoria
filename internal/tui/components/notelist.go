@@ -53,6 +53,7 @@ type NoteList struct {
 	height      int
 	width       int
 	styles      theme.Styles
+	expandAll   bool // whether all folders start expanded
 
 	// gg detection: true after first 'g' press
 	pendingG bool
@@ -61,8 +62,14 @@ type NoteList struct {
 // NewNoteList creates a NoteList with default styles.
 func NewNoteList() NoteList {
 	return NoteList{
-		styles: theme.DefaultStyles(),
+		styles:    theme.DefaultStyles(),
+		expandAll: true, // default: all folders expanded
 	}
+}
+
+// SetExpandAll sets whether all folders start expanded when items are loaded.
+func (n *NoteList) SetExpandAll(v bool) {
+	n.expandAll = v
 }
 
 func (n *NoteList) SetItems(items []NoteItem) {
@@ -73,7 +80,7 @@ func (n *NoteList) SetItems(items []NoteItem) {
 	}
 
 	n.items = items
-	n.tree = buildTree(n.items)
+	n.tree = buildTree(n.items, n.expandAll)
 	n.flatVisible = nil
 	n.rebuildFlatVisible()
 	n.cursor = 0
@@ -203,6 +210,42 @@ func (n *NoteList) ExpandSelected() {
 	node.expanded = true
 	n.rebuildFlatVisible()
 	n.clampCursor()
+}
+
+// ExpandAll expands every folder in the tree.
+func (n *NoteList) ExpandAll() {
+	n.walkTree(func(node *treeNode) {
+		if node.isFolder {
+			node.expanded = true
+		}
+	})
+	n.rebuildFlatVisible()
+	n.clampCursor()
+}
+
+// CollapseAll collapses every folder in the tree.
+func (n *NoteList) CollapseAll() {
+	n.walkTree(func(node *treeNode) {
+		if node.isFolder {
+			node.expanded = false
+		}
+	})
+	n.rebuildFlatVisible()
+	n.clampCursor()
+}
+
+// walkTree calls fn for every node in the tree (depth-first).
+func (n *NoteList) walkTree(fn func(*treeNode)) {
+	var walk func([]*treeNode)
+	walk = func(nodes []*treeNode) {
+		for _, node := range nodes {
+			fn(node)
+			if node.isFolder {
+				walk(node.children)
+			}
+		}
+	}
+	walk(n.tree)
 }
 
 func (n *NoteList) clampCursor() {
@@ -464,7 +507,7 @@ func (n NoteList) renderNode(visibleIndex int) string {
 }
 
 // buildTree constructs a hierarchical tree from a flat list of NoteItems.
-func buildTree(items []NoteItem) []*treeNode {
+func buildTree(items []NoteItem, expandAll bool) []*treeNode {
 	if len(items) == 0 {
 		return nil
 	}
@@ -490,7 +533,7 @@ func buildTree(items []NoteItem) []*treeNode {
 						name:     seg,
 						fullPath: strings.Join(segments[:depth+1], "/"),
 						isFolder: true,
-						expanded: depth == 0, // only top-level folders start expanded
+						expanded: expandAll || depth == 0,
 						depth:    depth,
 						children: make([]*treeNode, 0),
 					}
