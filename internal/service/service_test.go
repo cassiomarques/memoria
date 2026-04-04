@@ -1,6 +1,7 @@
 package service
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -188,7 +189,7 @@ func TestDelete(t *testing.T) {
 
 	// Verify removed from metadata
 	_, err = svc.meta.GetNote("deleteme.md")
-	if err != storage.ErrNoteNotFound {
+	if !errors.Is(err, storage.ErrNoteNotFound) {
 		t.Errorf("expected ErrNoteNotFound, got %v", err)
 	}
 
@@ -219,7 +220,7 @@ func TestMove(t *testing.T) {
 		t.Error("old path still exists on disk")
 	}
 	_, err = svc.meta.GetNote("old-name.md")
-	if err != storage.ErrNoteNotFound {
+	if !errors.Is(err, storage.ErrNoteNotFound) {
 		t.Errorf("expected ErrNoteNotFound for old path, got %v", err)
 	}
 

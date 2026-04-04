@@ -139,10 +139,8 @@ Line 2
 						}
 					}
 				}
-			} else {
-				if fm != nil {
-					t.Errorf("expected nil frontmatter, got %+v", fm)
-				}
+			} else if fm != nil {
+				t.Errorf("expected nil frontmatter, got %+v", fm)
 			}
 
 			if content != tt.wantContent {

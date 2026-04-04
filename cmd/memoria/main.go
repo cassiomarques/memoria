@@ -18,125 +18,125 @@ import (
 var version = "dev"
 
 func main() {
-// Handle flags before anything else
-var homeDir string
-args := os.Args[1:]
-for i := 0; i < len(args); i++ {
-	switch args[i] {
-	case "--version", "-v":
-		fmt.Printf("memoria %s\n", version)
-		os.Exit(0)
-	case "--home":
-		if i+1 >= len(args) {
-			fmt.Fprintln(os.Stderr, "Error: --home requires a directory path")
-			os.Exit(1)
+	// Handle flags before anything else (os.Exit is fine here, no defers yet)
+	var homeDir string
+	args := os.Args[1:]
+	for i := 0; i < len(args); i++ {
+		switch args[i] {
+		case "--version", "-v":
+			fmt.Printf("memoria %s\n", version)
+			os.Exit(0)
+		case "--home":
+			if i+1 >= len(args) {
+				fmt.Fprintln(os.Stderr, "Error: --home requires a directory path")
+				os.Exit(1)
+			}
+			homeDir = args[i+1]
+			i++
 		}
-		homeDir = args[i+1]
-		i++
 	}
-}
 
-// Override config dir if --home was provided
-if homeDir != "" {
-	if err := config.SetConfigDir(homeDir); err != nil {
-		fmt.Fprintf(os.Stderr, "Error: invalid --home path: %v\n", err)
+	if err := run(homeDir); err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(1)
 	}
 }
 
-// Load config (creates default if not found)
-cfg, err := config.Load(config.DefaultConfigPath())
-if err != nil {
-fmt.Fprintf(os.Stderr, "Error loading config: %v\n", err)
-os.Exit(1)
-}
+func run(homeDir string) error {
+	// Override config dir if --home was provided
+	if homeDir != "" {
+		if err := config.SetConfigDir(homeDir); err != nil {
+			return fmt.Errorf("invalid --home path: %w", err)
+		}
+	}
 
-// Ensure directories exist
-if err := config.EnsureDirs(cfg); err != nil {
-fmt.Fprintf(os.Stderr, "Error creating directories: %v\n", err)
-os.Exit(1)
-}
+	// Load config (creates default if not found)
+	cfg, err := config.Load(config.DefaultConfigPath())
+	if err != nil {
+		return fmt.Errorf("loading config: %w", err)
+	}
 
-// Acquire instance lock (prevents two instances on the same data dir)
-releaseLock, err := config.AcquireLock(config.DefaultConfigDir())
-if err != nil {
-fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-os.Exit(1)
-}
-defer releaseLock()
+	// Ensure directories exist
+	if err := config.EnsureDirs(cfg); err != nil {
+		return fmt.Errorf("creating directories: %w", err)
+	}
 
-// Save default config on first run
-cfgPath := config.DefaultConfigPath()
-if _, err := os.Stat(cfgPath); os.IsNotExist(err) {
-if err := cfg.Save(cfgPath); err != nil {
-fmt.Fprintf(os.Stderr, "Warning: could not save default config: %v\n", err)
-}
-}
+	// Acquire instance lock (prevents two instances on the same data dir)
+	releaseLock, err := config.AcquireLock(config.DefaultConfigDir())
+	if err != nil {
+		return err
+	}
+	defer releaseLock()
 
-// Resolve notes directory
-notesDir, err := cfg.ResolveNotesDir()
-if err != nil {
-fmt.Fprintf(os.Stderr, "Error resolving notes dir: %v\n", err)
-os.Exit(1)
-}
+	// Save default config on first run
+	cfgPath := config.DefaultConfigPath()
+	if _, err := os.Stat(cfgPath); os.IsNotExist(err) {
+		if err := cfg.Save(cfgPath); err != nil {
+			fmt.Fprintf(os.Stderr, "Warning: could not save default config: %v\n", err)
+		}
+	}
 
-// Initialize FileStore
-files, err := storage.NewFileStore(notesDir)
-if err != nil {
-fmt.Fprintf(os.Stderr, "Error initializing file store: %v\n", err)
-os.Exit(1)
-}
+	// Resolve notes directory
+	notesDir, err := cfg.ResolveNotesDir()
+	if err != nil {
+		return fmt.Errorf("resolving notes dir: %w", err)
+	}
 
-// Initialize MetaStore (SQLite)
-dbPath := filepath.Join(config.DefaultConfigDir(), "meta.db")
-meta, err := storage.NewMetaStore(dbPath)
-if err != nil {
-fmt.Fprintf(os.Stderr, "Error initializing meta store: %v\n", err)
-os.Exit(1)
-}
+	// Initialize FileStore
+	files, err := storage.NewFileStore(notesDir)
+	if err != nil {
+		return fmt.Errorf("initializing file store: %w", err)
+	}
 
-// Initialize SearchIndex (Bleve)
-indexPath := filepath.Join(config.DefaultConfigDir(), "search.bleve")
-idx, err := search.NewSearchIndex(indexPath)
-if err != nil {
-fmt.Fprintf(os.Stderr, "Error initializing search index: %v\n", err)
-os.Exit(1)
-}
+	// Initialize MetaStore (SQLite)
+	dbPath := filepath.Join(config.DefaultConfigDir(), "meta.db")
+	meta, err := storage.NewMetaStore(dbPath)
+	if err != nil {
+		return fmt.Errorf("initializing meta store: %w", err)
+	}
 
-// Initialize git repository
-repo, err := git.InitOrOpen(notesDir)
-if err != nil {
-fmt.Fprintf(os.Stderr, "Warning: git init failed: %v\n", err)
-repo = nil
-}
+	// Initialize SearchIndex (Bleve)
+	indexPath := filepath.Join(config.DefaultConfigDir(), "search.bleve")
+	idx, err := search.NewSearchIndex(indexPath)
+	if err != nil {
+		return fmt.Errorf("initializing search index: %w", err)
+	}
 
-// Initialize editor
-ed := editor.New(cfg.ResolveEditor())
+	// Initialize git repository
+	repo, err := git.InitOrOpen(notesDir)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Warning: git init failed: %v\n", err)
+		repo = nil
+	}
 
-// Create NoteService
-svc := service.New(files, meta, idx, repo, ed)
+	// Initialize editor
+	ed := editor.New(cfg.ResolveEditor())
 
-// Initial sync: load notes from disk into metadata + search
-if err := svc.Sync(); err != nil {
-fmt.Fprintf(os.Stderr, "Warning: initial sync failed: %v\n", err)
-}
+	// Create NoteService
+	svc := service.New(files, meta, idx, repo, ed)
 
-// Ensure all notes have frontmatter
-if count, err := svc.EnsureFrontmatter(); err != nil {
-fmt.Fprintf(os.Stderr, "Warning: frontmatter migration failed: %v\n", err)
-} else if count > 0 {
-fmt.Fprintf(os.Stderr, "Added frontmatter to %d notes\n", count)
-}
+	// Initial sync: load notes from disk into metadata + search
+	if err := svc.Sync(); err != nil {
+		fmt.Fprintf(os.Stderr, "Warning: initial sync failed: %v\n", err)
+	}
 
-// Create app wired to service
-app := tui.NewAppWithService(svc, tui.AppOptions{
-ExpandFolders: cfg.ResolveExpandFolders(),
-})
+	// Ensure all notes have frontmatter
+	if count, err := svc.EnsureFrontmatter(); err != nil {
+		fmt.Fprintf(os.Stderr, "Warning: frontmatter migration failed: %v\n", err)
+	} else if count > 0 {
+		fmt.Fprintf(os.Stderr, "Added frontmatter to %d notes\n", count)
+	}
 
-// Run Bubble Tea program
-p := tea.NewProgram(app)
-if _, err := p.Run(); err != nil {
-fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-os.Exit(1)
-}
+	// Create app wired to service
+	app := tui.NewAppWithService(svc, tui.AppOptions{
+		ExpandFolders: cfg.ResolveExpandFolders(),
+	})
+
+	// Run Bubble Tea program
+	p := tea.NewProgram(app)
+	if _, err := p.Run(); err != nil {
+		return fmt.Errorf("running TUI: %w", err)
+	}
+
+	return nil
 }

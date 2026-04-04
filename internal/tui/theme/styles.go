@@ -34,15 +34,15 @@ var (
 
 // Styles holds all TUI styles derived from the Catppuccin Mocha palette.
 type Styles struct {
-	TitleBar      lipgloss.Style
-	NoteItem      lipgloss.Style
-	NoteItemSel   lipgloss.Style
-	StatusBar     lipgloss.Style
-	CommandInput  lipgloss.Style
-	Tag           lipgloss.Style
-	FolderPath    lipgloss.Style
-	HelpText      lipgloss.Style
-	ErrorMessage  lipgloss.Style
+	TitleBar       lipgloss.Style
+	NoteItem       lipgloss.Style
+	NoteItemSel    lipgloss.Style
+	StatusBar      lipgloss.Style
+	CommandInput   lipgloss.Style
+	Tag            lipgloss.Style
+	FolderPath     lipgloss.Style
+	HelpText       lipgloss.Style
+	ErrorMessage   lipgloss.Style
 	SuccessMessage lipgloss.Style
 }
 

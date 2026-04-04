@@ -7,8 +7,6 @@ import (
 	"testing"
 
 	gogit "github.com/go-git/go-git/v5"
-	"github.com/go-git/go-git/v5/plumbing/object"
-	"time"
 )
 
 // helper: create a bare repo to act as a remote, returns its path.
@@ -35,25 +33,6 @@ func removeFile(t *testing.T, dir, name string) {
 	t.Helper()
 	if err := os.Remove(filepath.Join(dir, name)); err != nil {
 		t.Fatalf("remove file %s: %v", name, err)
-	}
-}
-
-// helper: commit directly using go-git for test setup purposes.
-func seedCommit(t *testing.T, repo *gogit.Repository, dir string) {
-	t.Helper()
-	writeFile(t, dir, ".gitkeep", "")
-	wt, err := repo.Worktree()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := wt.Add(".gitkeep"); err != nil {
-		t.Fatal(err)
-	}
-	_, err = wt.Commit("initial", &gogit.CommitOptions{
-		Author: &object.Signature{Name: "test", Email: "test@test", When: time.Now()},
-	})
-	if err != nil {
-		t.Fatal(err)
 	}
 }
 

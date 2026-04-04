@@ -9,11 +9,11 @@ import (
 
 // Note represents a markdown note with metadata.
 type Note struct {
-	Path     string    // relative path from notes root (e.g., "work/meeting.md")
-	Title    string    // derived from filename without .md extension
-	Content  string    // the markdown content (without frontmatter)
-	Tags     []string  // from frontmatter
-	Folder   string    // directory portion of path (e.g., "work")
+	Path     string   // relative path from notes root (e.g., "work/meeting.md")
+	Title    string   // derived from filename without .md extension
+	Content  string   // the markdown content (without frontmatter)
+	Tags     []string // from frontmatter
+	Folder   string   // directory portion of path (e.g., "work")
 	Created  time.Time
 	Modified time.Time
 }

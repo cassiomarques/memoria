@@ -721,70 +721,70 @@ func TestNoteList_ExpandAlreadyExpanded(t *testing.T) {
 }
 
 func TestNoteList_ExpandAll(t *testing.T) {
-nl := NewNoteList()
-nl.SetItems(sampleItems())
-nl.SetSize(80, 40)
+	nl := NewNoteList()
+	nl.SetItems(sampleItems())
+	nl.SetSize(80, 40)
 
-nl.CollapseAll()
-collapsedCount := visibleNodeCount(&nl)
+	nl.CollapseAll()
+	collapsedCount := visibleNodeCount(&nl)
 
-nl.ExpandAll()
-expandedCount := visibleNodeCount(&nl)
+	nl.ExpandAll()
+	expandedCount := visibleNodeCount(&nl)
 
-if expandedCount <= collapsedCount {
-t.Errorf("expected more visible nodes after ExpandAll (%d) than after CollapseAll (%d)",
-expandedCount, collapsedCount)
-}
+	if expandedCount <= collapsedCount {
+		t.Errorf("expected more visible nodes after ExpandAll (%d) than after CollapseAll (%d)",
+			expandedCount, collapsedCount)
+	}
 
-found := false
-for i := 0; i < nl.ItemCount(); i++ {
-item := nl.ItemAt(i)
-if item != nil && item.Folder == "Projects/CodeCoverage" {
-found = true
-break
-}
-}
-if !found {
-t.Error("nested folder items should be visible after ExpandAll")
-}
+	found := false
+	for i := 0; i < nl.ItemCount(); i++ {
+		item := nl.ItemAt(i)
+		if item != nil && item.Folder == "Projects/CodeCoverage" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Error("nested folder items should be visible after ExpandAll")
+	}
 }
 
 func TestNoteList_CollapseAll(t *testing.T) {
-nl := NewNoteList()
-nl.SetItems(sampleItems())
-nl.SetSize(80, 40)
+	nl := NewNoteList()
+	nl.SetItems(sampleItems())
+	nl.SetSize(80, 40)
 
-beforeCount := visibleNodeCount(&nl)
+	beforeCount := visibleNodeCount(&nl)
 
-nl.CollapseAll()
-afterCount := visibleNodeCount(&nl)
+	nl.CollapseAll()
+	afterCount := visibleNodeCount(&nl)
 
-if afterCount >= beforeCount {
-t.Errorf("expected fewer visible nodes after CollapseAll (%d) than before (%d)",
-afterCount, beforeCount)
-}
+	if afterCount >= beforeCount {
+		t.Errorf("expected fewer visible nodes after CollapseAll (%d) than before (%d)",
+			afterCount, beforeCount)
+	}
 
-// Only top-level folders and root-level notes should be visible
-// Folders: Dotcom, Go, Projects, Random = 4, Root notes: daily.md, scratch.md = 2
-expected := 6
-if afterCount != expected {
-t.Errorf("expected %d visible nodes after CollapseAll, got %d", expected, afterCount)
-}
+	// Only top-level folders and root-level notes should be visible
+	// Folders: Dotcom, Go, Projects, Random = 4, Root notes: daily.md, scratch.md = 2
+	expected := 6
+	if afterCount != expected {
+		t.Errorf("expected %d visible nodes after CollapseAll, got %d", expected, afterCount)
+	}
 }
 
 func TestNoteList_CollapseAllThenExpandAll_Roundtrip(t *testing.T) {
-nl := NewNoteList()
-nl.SetItems(sampleItems())
-nl.SetSize(80, 40)
+	nl := NewNoteList()
+	nl.SetItems(sampleItems())
+	nl.SetSize(80, 40)
 
-nl.ExpandAll()
-fullyExpanded := visibleNodeCount(&nl)
+	nl.ExpandAll()
+	fullyExpanded := visibleNodeCount(&nl)
 
-nl.CollapseAll()
-nl.ExpandAll()
-roundtrip := visibleNodeCount(&nl)
+	nl.CollapseAll()
+	nl.ExpandAll()
+	roundtrip := visibleNodeCount(&nl)
 
-if roundtrip != fullyExpanded {
-t.Errorf("expected same count after roundtrip (%d), got %d", fullyExpanded, roundtrip)
-}
+	if roundtrip != fullyExpanded {
+		t.Errorf("expected same count after roundtrip (%d), got %d", fullyExpanded, roundtrip)
+	}
 }

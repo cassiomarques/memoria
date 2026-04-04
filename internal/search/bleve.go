@@ -1,6 +1,7 @@
 package search
 
 import (
+	"errors"
 	"os"
 	"strings"
 
@@ -27,15 +28,15 @@ type noteDocument struct {
 	Path    string `json:"path"`
 	Title   string `json:"title"`
 	Content string `json:"content"`
-	Tags    string `json:"tags"`   // space-separated tags for searching
+	Tags    string `json:"tags"` // space-separated tags for searching
 	Folder  string `json:"folder"`
 }
 
 // buildIndexMapping creates the custom index mapping used by all index types.
 func buildIndexMapping() mapping.IndexMapping {
-	textAnalyzed := func(analyzerName string) *mapping.FieldMapping {
+	textAnalyzed := func() *mapping.FieldMapping {
 		fm := mapping.NewTextFieldMapping()
-		fm.Analyzer = analyzerName
+		fm.Analyzer = "en"
 		fm.Store = true
 		fm.Index = true
 		fm.IncludeTermVectors = true
@@ -49,10 +50,10 @@ func buildIndexMapping() mapping.IndexMapping {
 	pathField.IncludeInAll = false
 
 	noteMapping := bleve.NewDocumentMapping()
-	noteMapping.AddFieldMappingsAt("content", textAnalyzed("en"))
-	noteMapping.AddFieldMappingsAt("title", textAnalyzed("en"))
-	noteMapping.AddFieldMappingsAt("tags", textAnalyzed("en"))
-	noteMapping.AddFieldMappingsAt("folder", textAnalyzed("en"))
+	noteMapping.AddFieldMappingsAt("content", textAnalyzed())
+	noteMapping.AddFieldMappingsAt("title", textAnalyzed())
+	noteMapping.AddFieldMappingsAt("tags", textAnalyzed())
+	noteMapping.AddFieldMappingsAt("folder", textAnalyzed())
 	noteMapping.AddFieldMappingsAt("path", pathField)
 
 	im := bleve.NewIndexMapping()
@@ -65,7 +66,7 @@ func buildIndexMapping() mapping.IndexMapping {
 func NewSearchIndex(path string) (*SearchIndex, error) {
 	idx, err := bleve.Open(path)
 	if err != nil {
-		if err == bleve.ErrorIndexPathDoesNotExist || os.IsNotExist(err) {
+		if errors.Is(err, bleve.ErrorIndexPathDoesNotExist) || os.IsNotExist(err) {
 			idx, err = bleve.New(path, buildIndexMapping())
 			if err != nil {
 				return nil, err

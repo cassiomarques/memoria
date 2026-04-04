@@ -272,8 +272,7 @@ func (n NoteList) ItemAt(index int) *NoteItem {
 func (n NoteList) Init() tea.Cmd { return nil }
 
 func (n NoteList) Update(msg tea.Msg) (NoteList, tea.Cmd) {
-	switch msg := msg.(type) {
-	case tea.KeyPressMsg:
+	if msg, ok := msg.(tea.KeyPressMsg); ok {
 		key := msg.String()
 
 		// Handle gg (go to top)
@@ -566,7 +565,9 @@ func buildTree(items []NoteItem, expandAll bool) []*treeNode {
 		}
 	}
 
-	result := append(folders, rootNotes...)
+	result := make([]*treeNode, 0, len(folders)+len(rootNotes))
+	result = append(result, folders...)
+	result = append(result, rootNotes...)
 	setLastChildFlags(result)
 	return result
 }
@@ -609,19 +610,4 @@ func humanizeTitle(title string) string {
 		}
 	}
 	return strings.Join(words, " ")
-}
-
-func formatTime(t time.Time) string {
-	now := time.Now()
-	diff := now.Sub(t)
-	switch {
-	case diff < time.Minute:
-		return "just now"
-	case diff < time.Hour:
-		return fmt.Sprintf("%dm ago", int(diff.Minutes()))
-	case diff < 24*time.Hour:
-		return fmt.Sprintf("%dh ago", int(diff.Hours()))
-	default:
-		return t.Format("Jan 02")
-	}
 }

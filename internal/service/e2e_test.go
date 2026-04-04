@@ -1,6 +1,7 @@
 package service
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -146,7 +147,7 @@ func TestE2E_FullLifecycle(t *testing.T) {
 			t.Error("old path still exists on disk")
 		}
 		_, err := svc.meta.GetNote(notePath)
-		if err != storage.ErrNoteNotFound {
+		if !errors.Is(err, storage.ErrNoteNotFound) {
 			t.Errorf("expected ErrNoteNotFound for old path, got %v", err)
 		}
 
@@ -182,7 +183,7 @@ func TestE2E_FullLifecycle(t *testing.T) {
 			t.Error("note still exists on disk after delete")
 		}
 		_, err := svc.meta.GetNote(newPath)
-		if err != storage.ErrNoteNotFound {
+		if !errors.Is(err, storage.ErrNoteNotFound) {
 			t.Errorf("expected ErrNoteNotFound, got %v", err)
 		}
 		cnt, err := svc.search.Count()

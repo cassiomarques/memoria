@@ -75,9 +75,7 @@ func TestOpenCmd(t *testing.T) {
 	filePath := "/some/test/file.md"
 	cmd := e.OpenCmd(filePath)
 
-	if cmd.Path == "" {
-		// Path may be resolved or not depending on LookPath, just check Args
-	}
+	// Path may be resolved or not depending on LookPath, just check Args
 	if len(cmd.Args) < 2 || cmd.Args[len(cmd.Args)-1] != filePath {
 		t.Errorf("expected last arg to be %q, got %v", filePath, cmd.Args)
 	}

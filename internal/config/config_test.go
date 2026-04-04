@@ -160,46 +160,46 @@ func TestSaveOmitsEmptyOptionalFields(t *testing.T) {
 
 func TestResolveEditor(t *testing.T) {
 	tests := []struct {
-		name     string
-		editor   string
-		envEditor  string
-		envVisual  string
-		want     string
+		name      string
+		editor    string
+		envEditor string
+		envVisual string
+		want      string
 	}{
 		{
-			name:   "configured editor takes precedence",
-			editor: "code",
+			name:      "configured editor takes precedence",
+			editor:    "code",
 			envEditor: "vim",
 			envVisual: "nano",
-			want:   "code",
+			want:      "code",
 		},
 		{
-			name:   "falls back to EDITOR env var",
-			editor: "",
+			name:      "falls back to EDITOR env var",
+			editor:    "",
 			envEditor: "emacs",
 			envVisual: "",
-			want:   "emacs",
+			want:      "emacs",
 		},
 		{
-			name:   "falls back to VISUAL env var",
-			editor: "",
+			name:      "falls back to VISUAL env var",
+			editor:    "",
 			envEditor: "",
 			envVisual: "gedit",
-			want:   "gedit",
+			want:      "gedit",
 		},
 		{
-			name:   "falls back to vim",
-			editor: "",
+			name:      "falls back to vim",
+			editor:    "",
 			envEditor: "",
 			envVisual: "",
-			want:   "vim",
+			want:      "vim",
 		},
 		{
-			name:   "EDITOR takes precedence over VISUAL",
-			editor: "",
+			name:      "EDITOR takes precedence over VISUAL",
+			editor:    "",
 			envEditor: "emacs",
 			envVisual: "gedit",
-			want:   "emacs",
+			want:      "emacs",
 		},
 	}
 

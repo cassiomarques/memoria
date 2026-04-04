@@ -4,11 +4,9 @@ linters:
   enable:
     - errcheck        # unchecked errors
     - govet           # go vet on steroids
-    - staticcheck     # comprehensive static analysis
+    - staticcheck     # comprehensive static analysis (includes gosimple)
     - unused          # unused code
-    - gosimple        # simplification suggestions
     - ineffassign     # useless assignments
-    - typecheck       # type checking
     - gocritic        # opinionated linter with many checks
     - misspell        # spelling mistakes in comments/strings
     - prealloc        # slice preallocation hints
@@ -18,27 +16,38 @@ linters:
     - errorlint       # error wrapping best practices
     - bodyclose       # HTTP response body close
     - durationcheck   # bad time.Duration multiplications
-    - exportloopref   # loop variable capture bugs
+  settings:
+    gocritic:
+      enabled-tags:
+        - diagnostic
+        - performance
+      disabled-checks:
+        - hugeParam  # we pass structs by value in Bubble Tea (by design)
+  exclusions:
+    rules:
+      # Test files: allow unchecked errors, unused params, gocritic nits
+      - path: _test\.go
+        linters:
+          - errcheck
+          - unparam
+          - gocritic
+      # Intentional misspellings in fuzzy search tests
+      - path: _test\.go
+        linters:
+          - misspell
+      # defer cleanup calls — ignoring Close/Remove errors is idiomatic
+      - source: "defer "
+        linters:
+          - errcheck
+      # t.Cleanup funcs — ignoring Close errors is fine
+      - source: "t\\.Cleanup"
+        linters:
+          - errcheck
 
 formatters:
   enable:
     - gofmt           # standard formatting
     - goimports       # import ordering
-
-linters-settings:
-  gocritic:
-    enabled-tags:
-      - diagnostic
-      - performance
-    disabled-checks:
-      - hugeParam  # we pass structs by value in Bubble Tea (by design)
-
-issues:
-  exclude-dirs:
-    - dist
-  exclude-rules:
-    # Test files can have longer functions and unused params
-    - path: _test\.go
-      linters:
-        - unparam
-        - gocritic
+  exclusions:
+    paths:
+      - dist

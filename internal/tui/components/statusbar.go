@@ -29,10 +29,10 @@ func NewStatusBar() StatusBar {
 }
 
 func (s *StatusBar) SetFolder(folder string)       { s.folder = folder }
-func (s *StatusBar) SetTagFilter(tagFilter string)  { s.tagFilter = tagFilter }
-func (s *StatusBar) SetNoteCount(noteCount int)     { s.noteCount = noteCount }
-func (s *StatusBar) SetSynced(synced bool)          { s.synced = synced }
-func (s *StatusBar) SetWidth(width int)             { s.width = width }
+func (s *StatusBar) SetTagFilter(tagFilter string) { s.tagFilter = tagFilter }
+func (s *StatusBar) SetNoteCount(noteCount int)    { s.noteCount = noteCount }
+func (s *StatusBar) SetSynced(synced bool)         { s.synced = synced }
+func (s *StatusBar) SetWidth(width int)            { s.width = width }
 func (s *StatusBar) SetMessage(msg string, style lipgloss.Style) {
 	s.message = msg
 	s.messageStyle = style

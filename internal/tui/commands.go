@@ -192,7 +192,7 @@ func completePathSegments(prefix string, noteItems []components.NoteItem, includ
 	dir := ""
 	partial := lowerPrefix
 	if idx := strings.LastIndex(prefix, "/"); idx >= 0 {
-		dir = prefix[:idx+1]       // e.g. "Work/"
+		dir = prefix[:idx+1]          // e.g. "Work/"
 		partial = lowerPrefix[idx+1:] // e.g. "proj"
 	}
 

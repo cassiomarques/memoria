@@ -172,7 +172,7 @@ func AcquireLock(configDir string) (release func(), err error) {
 		return nil, fmt.Errorf("could not create lock file: %w", writeErr)
 	}
 
-	release = func() { os.Remove(lockPath) }
+	release = func() { _ = os.Remove(lockPath) }
 	return release, nil
 }
 

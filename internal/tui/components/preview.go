@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"strings"
 
-	tea "charm.land/bubbletea/v2"
 	"charm.land/bubbles/v2/viewport"
+	tea "charm.land/bubbletea/v2"
 	glamour "charm.land/glamour/v2"
 	"charm.land/lipgloss/v2"
 	"github.com/cassiomarques/memoria/internal/tui/theme"
@@ -155,8 +155,8 @@ func (p Preview) View() string {
 	if p.content == "" {
 		placeholder := lipgloss.NewStyle().
 			Foreground(theme.ColorOverlay0).
-			Width(p.width - 4).
-			Height(p.height - 4).
+			Width(p.width-4).
+			Height(p.height-4).
 			Align(lipgloss.Center, lipgloss.Center)
 		return borderStyle.Render(placeholder.Render("Press p to preview a note"))
 	}

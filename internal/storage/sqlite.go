@@ -58,13 +58,13 @@ func initStore(db *sql.DB) (*MetaStore, error) {
 	}
 	for _, p := range pragmas {
 		if _, err := db.Exec(p); err != nil {
-			db.Close()
+			_ = db.Close()
 			return nil, err
 		}
 	}
 
 	if err := migrate(db); err != nil {
-		db.Close()
+		_ = db.Close()
 		return nil, err
 	}
 
