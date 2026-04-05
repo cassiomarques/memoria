@@ -1017,3 +1017,76 @@ func TestNoteList_FilteredCount(t *testing.T) {
 		t.Errorf("expected 9 notes after clear, got %d", nl.FilteredCount())
 	}
 }
+
+// --- Bookmark/Pin tests ---
+
+func TestBuildTree_PinnedVirtualSection(t *testing.T) {
+	items := []NoteItem{
+		{Path: "work/meeting.md", Title: "meeting", Folder: "Work"},
+		{Path: "daily.md", Title: "daily", Folder: "", Pinned: true},
+		{Path: "work/standup.md", Title: "standup", Folder: "Work", Pinned: true},
+	}
+
+	nl := NewNoteList()
+	nl.SetSize(80, 40)
+	nl.SetItems(items)
+
+	nodes := nl.tree
+	if len(nodes) == 0 {
+		t.Fatal("expected tree nodes")
+	}
+
+	// First node should be the virtual "📌 Pinned" folder
+	if !nodes[0].isFolder || nodes[0].fullPath != "__pinned__" {
+		t.Errorf("expected first node to be virtual pinned folder, got %+v", nodes[0])
+	}
+
+	// Virtual folder should contain 2 pinned notes
+	if len(nodes[0].children) != 2 {
+		t.Errorf("expected 2 pinned children, got %d", len(nodes[0].children))
+	}
+
+	// Pinned notes should still exist in their original folders too
+	foundInWork := false
+	for _, c := range nodes {
+		if c.isFolder && c.name == "Work" {
+			for _, wc := range c.children {
+				if wc.noteItem != nil && wc.noteItem.Path == "work/standup.md" {
+					foundInWork = true
+				}
+			}
+		}
+	}
+	if !foundInWork {
+		t.Error("pinned note should still appear in its original folder")
+	}
+}
+
+func TestNoteItem_PinIcon(t *testing.T) {
+	items := []NoteItem{
+		{Path: "todo.md", Title: "todo", Folder: "", Pinned: true},
+		{Path: "notes.md", Title: "notes", Folder: ""},
+	}
+
+	nl := NewNoteList()
+	nl.SetSize(80, 10)
+	nl.SetItems(items)
+
+	view := nl.View()
+	if !containsSubstring(view, "📌") {
+		t.Error("expected pin icon in rendered view for pinned note")
+	}
+}
+
+func containsSubstring(s, sub string) bool {
+	return len(s) >= len(sub) && findSubstring(s, sub)
+}
+
+func findSubstring(s, sub string) bool {
+	for i := 0; i <= len(s)-len(sub); i++ {
+		if s[i:i+len(sub)] == sub {
+			return true
+		}
+	}
+	return false
+}

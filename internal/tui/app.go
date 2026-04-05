@@ -84,13 +84,15 @@ func NewApp() App {
 
 // AppOptions holds optional configuration for the TUI app.
 type AppOptions struct {
-	ExpandFolders bool
+	ExpandFolders   bool
+	ShowPinnedNotes bool
 }
 
 // NewAppWithService creates an App wired to the NoteService, loading initial data.
 func NewAppWithService(svc *service.NoteService, opts AppOptions) App {
 	noteList := components.NewNoteList()
 	noteList.SetExpandAll(opts.ExpandFolders)
+	noteList.SetShowPinned(opts.ShowPinnedNotes)
 
 	a := App{
 		noteList:    noteList,
@@ -285,6 +287,9 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			case "n":
 				a.initiateCreate()
 				return a, nil
+			case "b":
+				a.togglePin()
+				return a, nil
 			}
 		} else {
 			// Command bar is active
@@ -302,8 +307,11 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					a.commandBar.PrevSuggestion()
 					return a, nil
 				case "enter":
-					a.commandBar.AcceptSuggestion()
-					return a, nil
+					if a.commandBar.AcceptSuggestion() {
+						return a, nil
+					}
+					// No suggestion selected — dismiss and fall through to execute
+					a.commandBar.DismissMenu()
 				default:
 					// Any other key dismisses the menu and falls through to normal input
 					a.commandBar.DismissMenu()
@@ -468,6 +476,29 @@ func (a *App) confirmDelete() {
 	a.refreshTags()
 }
 
+// togglePin pins or unpins the currently selected note.
+func (a *App) togglePin() {
+	if a.svc == nil {
+		return
+	}
+	sel := a.noteList.SelectedItem()
+	if sel == nil {
+		a.setMessage("📌 Select a note to bookmark", false)
+		return
+	}
+	nowPinned, err := a.svc.TogglePin(sel.Path)
+	if err != nil {
+		a.setMessage("Error: "+err.Error(), true)
+		return
+	}
+	_ = a.refreshNoteList()
+	if nowPinned {
+		a.setMessage("📌 Bookmarked: "+sel.Title, false)
+	} else {
+		a.setMessage("Removed bookmark: "+sel.Title, false)
+	}
+}
+
 // initiateCreate starts the create-note-in-folder flow.
 func (a *App) initiateCreate() {
 	if a.svc == nil {
@@ -571,6 +602,20 @@ func (a *App) refreshNoteList() error {
 				Tags:     n.Tags,
 				Modified: n.Modified,
 			})
+		}
+	}
+
+	// Mark pinned items
+	pinned, err := a.svc.ListPinned()
+	if err == nil {
+		pinnedSet := make(map[string]bool, len(pinned))
+		for _, p := range pinned {
+			pinnedSet[p] = true
+		}
+		for i := range items {
+			if pinnedSet[items[i].Path] {
+				items[i].Pinned = true
+			}
 		}
 	}
 
@@ -1034,6 +1079,7 @@ func (a *App) cmdHelp() {
 | **e** | Edit previewed note (when preview focused) |
 | **d** | Delete selected note or folder |
 | **n** | Create a new note (in focused folder) |
+| **b** | Toggle bookmark on selected note |
 | **j/k** | Navigate list |
 | **h/l, ←/→** | Collapse/expand folder |
 | **H/L** | Collapse/expand all folders |

@@ -936,3 +936,68 @@ func TestOpen_AddsFrontmatterOnAccess(t *testing.T) {
 		t.Error("expected original content to be preserved after Open")
 	}
 }
+
+// --- Bookmark/Pin service tests ---
+
+func TestTogglePin(t *testing.T) {
+	svc := setupService(t)
+
+	_, err := svc.Create("todo.md", "", []string{})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Pin
+	pinned, err := svc.TogglePin("todo.md")
+	if err != nil {
+		t.Fatalf("TogglePin: %v", err)
+	}
+	if !pinned {
+		t.Error("expected note to be pinned")
+	}
+
+	// Verify
+	isPinned, err := svc.IsPinned("todo.md")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !isPinned {
+		t.Error("expected IsPinned to return true")
+	}
+
+	// Unpin
+	pinned, err = svc.TogglePin("todo.md")
+	if err != nil {
+		t.Fatalf("TogglePin (unpin): %v", err)
+	}
+	if pinned {
+		t.Error("expected note to be unpinned")
+	}
+}
+
+func TestListPinned(t *testing.T) {
+	svc := setupService(t)
+
+	for _, name := range []string{"a.md", "b.md", "c.md"} {
+		if _, err := svc.Create(name, "", nil); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	for _, name := range []string{"a.md", "c.md"} {
+		if _, err := svc.TogglePin(name); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	pins, err := svc.ListPinned()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(pins) != 2 {
+		t.Fatalf("expected 2 pinned, got %d", len(pins))
+	}
+	if pins[0] != "a.md" || pins[1] != "c.md" {
+		t.Errorf("unexpected pin order: %v", pins)
+	}
+}

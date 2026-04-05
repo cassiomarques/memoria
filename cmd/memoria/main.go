@@ -129,7 +129,8 @@ func run(homeDir string) error {
 
 	// Create app wired to service
 	app := tui.NewAppWithService(svc, tui.AppOptions{
-		ExpandFolders: cfg.ResolveExpandFolders(),
+		ExpandFolders:   cfg.ResolveExpandFolders(),
+		ShowPinnedNotes: cfg.ResolveShowPinnedNotes(),
 	})
 
 	// Run Bubble Tea program

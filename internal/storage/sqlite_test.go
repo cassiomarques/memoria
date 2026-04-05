@@ -355,3 +355,124 @@ func TestGetTags_NoNote(t *testing.T) {
 		t.Errorf("tags = %v, want empty", tags)
 	}
 }
+
+// --- Bookmark/Pin tests ---
+
+func TestPinNote(t *testing.T) {
+	store := newTestStore(t)
+	n := makeNote(t, "work/meeting.md", "meeting notes", []string{"work"})
+	if err := store.UpsertNote(n); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := store.PinNote("work/meeting.md"); err != nil {
+		t.Fatalf("PinNote: %v", err)
+	}
+
+	pinned, err := store.IsPinned("work/meeting.md")
+	if err != nil {
+		t.Fatalf("IsPinned: %v", err)
+	}
+	if !pinned {
+		t.Error("expected note to be pinned")
+	}
+}
+
+func TestPinNote_Idempotent(t *testing.T) {
+	store := newTestStore(t)
+	n := makeNote(t, "work/meeting.md", "meeting notes", nil)
+	if err := store.UpsertNote(n); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := store.PinNote("work/meeting.md"); err != nil {
+		t.Fatal(err)
+	}
+	// Pin again — should not error
+	if err := store.PinNote("work/meeting.md"); err != nil {
+		t.Fatalf("second PinNote should be no-op, got: %v", err)
+	}
+
+	pins, err := store.ListPinned()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(pins) != 1 {
+		t.Errorf("expected 1 pin, got %d", len(pins))
+	}
+}
+
+func TestUnpinNote(t *testing.T) {
+	store := newTestStore(t)
+	n := makeNote(t, "ideas.md", "ideas", nil)
+	if err := store.UpsertNote(n); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := store.PinNote("ideas.md"); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.UnpinNote("ideas.md"); err != nil {
+		t.Fatalf("UnpinNote: %v", err)
+	}
+
+	pinned, err := store.IsPinned("ideas.md")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if pinned {
+		t.Error("expected note to be unpinned")
+	}
+}
+
+func TestListPinned_Order(t *testing.T) {
+	store := newTestStore(t)
+
+	notes := []string{"a.md", "b.md", "c.md"}
+	for _, p := range notes {
+		n := makeNote(t, p, p, nil)
+		if err := store.UpsertNote(n); err != nil {
+			t.Fatal(err)
+		}
+		if err := store.PinNote(p); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	pins, err := store.ListPinned()
+	if err != nil {
+		t.Fatalf("ListPinned: %v", err)
+	}
+	if len(pins) != 3 {
+		t.Fatalf("expected 3 pins, got %d", len(pins))
+	}
+	for i, want := range notes {
+		if pins[i] != want {
+			t.Errorf("pins[%d] = %q, want %q", i, pins[i], want)
+		}
+	}
+}
+
+func TestPinNote_DeletedViaCascade(t *testing.T) {
+	store := newTestStore(t)
+	n := makeNote(t, "temp.md", "temp", nil)
+	if err := store.UpsertNote(n); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.PinNote("temp.md"); err != nil {
+		t.Fatal(err)
+	}
+
+	// Delete the note — cascade should remove bookmark
+	if err := store.DeleteNote("temp.md"); err != nil {
+		t.Fatal(err)
+	}
+
+	pins, err := store.ListPinned()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(pins) != 0 {
+		t.Errorf("expected 0 pins after delete, got %d", len(pins))
+	}
+}

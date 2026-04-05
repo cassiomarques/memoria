@@ -14,18 +14,21 @@ import (
 
 // Config holds the application configuration.
 type Config struct {
-	NotesDir      string `yaml:"notes_dir"`
-	GitRemote     string `yaml:"git_remote,omitempty"`
-	Editor        string `yaml:"editor,omitempty"`
-	ExpandFolders *bool  `yaml:"expand_folders,omitempty"`
+	NotesDir        string `yaml:"notes_dir"`
+	GitRemote       string `yaml:"git_remote,omitempty"`
+	Editor          string `yaml:"editor,omitempty"`
+	ExpandFolders   *bool  `yaml:"expand_folders,omitempty"`
+	ShowPinnedNotes *bool  `yaml:"show_pinned_notes,omitempty"`
 }
 
 // DefaultConfig returns a Config with sensible defaults.
 func DefaultConfig() *Config {
 	expandDefault := true
+	showPinned := true
 	return &Config{
-		NotesDir:      filepath.Join(DefaultConfigDir(), "notes"),
-		ExpandFolders: &expandDefault,
+		NotesDir:        filepath.Join(DefaultConfigDir(), "notes"),
+		ExpandFolders:   &expandDefault,
+		ShowPinnedNotes: &showPinned,
 	}
 }
 
@@ -67,6 +70,15 @@ func (c *Config) ResolveExpandFolders() bool {
 		return true
 	}
 	return *c.ExpandFolders
+}
+
+// ResolveShowPinnedNotes returns whether to show the virtual "Pinned" section.
+// Defaults to true if not set.
+func (c *Config) ResolveShowPinnedNotes() bool {
+	if c.ShowPinnedNotes == nil {
+		return true
+	}
+	return *c.ShowPinnedNotes
 }
 
 // ResolveEditor returns the editor to use, checking in order:

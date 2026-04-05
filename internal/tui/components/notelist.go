@@ -18,6 +18,7 @@ type NoteItem struct {
 	Folder   string
 	Tags     []string
 	Modified time.Time
+	Pinned   bool
 }
 
 // treeNode represents a node in the folder tree (either a folder or a note).
@@ -54,6 +55,7 @@ type NoteList struct {
 	width       int
 	styles      theme.Styles
 	expandAll   bool // whether all folders start expanded
+	showPinned  bool // whether to show virtual "Pinned" section at top
 	filterText  string
 
 	// gg detection: true after first 'g' press
@@ -63,14 +65,20 @@ type NoteList struct {
 // NewNoteList creates a NoteList with default styles.
 func NewNoteList() NoteList {
 	return NoteList{
-		styles:    theme.DefaultStyles(),
-		expandAll: true, // default: all folders expanded
+		styles:     theme.DefaultStyles(),
+		expandAll:  true, // default: all folders expanded
+		showPinned: true, // default: show pinned section
 	}
 }
 
 // SetExpandAll sets whether all folders start expanded when items are loaded.
 func (n *NoteList) SetExpandAll(v bool) {
 	n.expandAll = v
+}
+
+// SetShowPinned sets whether the virtual "📌 Pinned" section appears at the top.
+func (n *NoteList) SetShowPinned(v bool) {
+	n.showPinned = v
 }
 
 func (n *NoteList) SetItems(items []NoteItem) {
@@ -81,7 +89,7 @@ func (n *NoteList) SetItems(items []NoteItem) {
 	}
 
 	n.items = items
-	n.tree = buildTree(n.items, n.expandAll)
+	n.tree = buildTree(n.items, n.expandAll, n.showPinned)
 	n.flatVisible = nil
 	n.rebuildFlatVisible()
 	n.cursor = 0
@@ -480,6 +488,9 @@ func (n NoteList) renderNode(visibleIndex int) string {
 
 	// Note rendering
 	displayTitle := node.name
+	if node.noteItem != nil && node.noteItem.Pinned {
+		displayTitle = "📌 " + displayTitle
+	}
 	overhead := 4 + 2*node.depth
 	if node.depth > 0 {
 		overhead += 4 // tree connector
@@ -513,7 +524,7 @@ func (n NoteList) renderNode(visibleIndex int) string {
 }
 
 // buildTree constructs a hierarchical tree from a flat list of NoteItems.
-func buildTree(items []NoteItem, expandAll bool) []*treeNode {
+func buildTree(items []NoteItem, expandAll bool, showPinned bool) []*treeNode {
 	if len(items) == 0 {
 		return nil
 	}
@@ -562,21 +573,62 @@ func buildTree(items []NoteItem, expandAll bool) []*treeNode {
 
 	sortTree(root)
 
-	// Separate root children: folders first, then root notes at the end
+	// Separate root children: folders, then root notes
 	var folders, rootNotes []*treeNode
 	for _, c := range root.children {
-		if c.isFolder {
+		switch {
+		case c.isFolder:
 			folders = append(folders, c)
-		} else {
+		default:
 			rootNotes = append(rootNotes, c)
 		}
 	}
 
-	result := make([]*treeNode, 0, len(folders)+len(rootNotes))
+	result := make([]*treeNode, 0, 1+len(folders)+len(rootNotes))
+
+	// Add virtual "📌 Pinned" section at the very top if enabled and there are pinned notes
+	if showPinned {
+		var pinnedNodes []*treeNode
+		collectPinned(root, &pinnedNodes)
+		if len(pinnedNodes) > 0 {
+			pinnedFolder := &treeNode{
+				name:     "📌 Pinned",
+				fullPath: "__pinned__",
+				isFolder: true,
+				expanded: true,
+				depth:    0,
+				children: make([]*treeNode, 0, len(pinnedNodes)),
+			}
+			for _, pn := range pinnedNodes {
+				// Create shallow copy so they appear under the virtual section
+				child := &treeNode{
+					name:     humanizeTitle(pn.noteItem.Title),
+					isFolder: false,
+					noteItem: pn.noteItem,
+					depth:    1,
+				}
+				pinnedFolder.children = append(pinnedFolder.children, child)
+			}
+			setLastChildFlags(pinnedFolder.children)
+			result = append(result, pinnedFolder)
+		}
+	}
+
 	result = append(result, folders...)
 	result = append(result, rootNotes...)
 	setLastChildFlags(result)
 	return result
+}
+
+// collectPinned recursively gathers all pinned note nodes.
+func collectPinned(node *treeNode, result *[]*treeNode) {
+	for _, c := range node.children {
+		if c.isFolder {
+			collectPinned(c, result)
+		} else if c.noteItem != nil && c.noteItem.Pinned {
+			*result = append(*result, c)
+		}
+	}
 }
 
 func sortTree(node *treeNode) {
@@ -704,7 +756,7 @@ func (n *NoteList) SetFilter(pattern string) {
 	n.filterText = pattern
 	if pattern == "" {
 		// Restore full list
-		n.tree = buildTree(n.items, n.expandAll)
+		n.tree = buildTree(n.items, n.expandAll, n.showPinned)
 		n.flatVisible = nil
 		n.rebuildFlatVisible()
 		n.cursor = 0
@@ -732,7 +784,7 @@ func (n *NoteList) SetFilter(pattern string) {
 		filtered[i] = m.item
 	}
 
-	n.tree = buildTree(filtered, true) // always expand when filtering
+	n.tree = buildTree(filtered, true, false) // always expand when filtering, no pinned section
 	n.flatVisible = nil
 	n.rebuildFlatVisible()
 	n.cursor = 0
@@ -744,7 +796,7 @@ func (n *NoteList) SetFilter(pattern string) {
 // are preserved so AllItems() still returns the full set.
 func (n *NoteList) SetFilteredItems(items []NoteItem, filterText string) {
 	n.filterText = filterText
-	n.tree = buildTree(items, true)
+	n.tree = buildTree(items, true, false)
 	n.flatVisible = nil
 	n.rebuildFlatVisible()
 	n.cursor = 0

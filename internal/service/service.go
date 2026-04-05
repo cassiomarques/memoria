@@ -392,6 +392,29 @@ func (s *NoteService) ListByTag(tag string) ([]*storage.NoteMeta, error) {
 	return s.meta.ListByTag(tag)
 }
 
+// TogglePin pins a note if it's unpinned, or unpins it if it's pinned.
+// Returns the new pinned state.
+func (s *NoteService) TogglePin(path string) (bool, error) {
+	pinned, err := s.meta.IsPinned(path)
+	if err != nil {
+		return false, err
+	}
+	if pinned {
+		return false, s.meta.UnpinNote(path)
+	}
+	return true, s.meta.PinNote(path)
+}
+
+// IsPinned reports whether a note is bookmarked.
+func (s *NoteService) IsPinned(path string) (bool, error) {
+	return s.meta.IsPinned(path)
+}
+
+// ListPinned returns the paths of all bookmarked notes in order.
+func (s *NoteService) ListPinned() ([]string, error) {
+	return s.meta.ListPinned()
+}
+
 // Sync pulls from git (if configured), then reloads all notes from disk
 // and re-indexes them in metadata and search.
 func (s *NoteService) Sync() error {

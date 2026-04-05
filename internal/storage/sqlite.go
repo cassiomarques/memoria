@@ -88,6 +88,12 @@ func migrate(db *sql.DB) error {
 		)`,
 		`CREATE INDEX IF NOT EXISTS idx_tags_tag ON tags(tag)`,
 		`CREATE INDEX IF NOT EXISTS idx_notes_folder ON notes(folder)`,
+		`CREATE TABLE IF NOT EXISTS bookmarks (
+			note_path   TEXT PRIMARY KEY,
+			order_index INTEGER NOT NULL DEFAULT 0,
+			created_at  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+			FOREIGN KEY (note_path) REFERENCES notes(path) ON DELETE CASCADE ON UPDATE CASCADE
+		)`,
 	}
 	for _, s := range stmts {
 		if _, err := db.Exec(s); err != nil {
@@ -268,6 +274,50 @@ func (m *MetaStore) GetTags(path string) ([]string, error) {
 		tags = append(tags, tag)
 	}
 	return tags, rows.Err()
+}
+
+// PinNote adds a note to the bookmarks list. If already pinned, this is a no-op.
+func (m *MetaStore) PinNote(path string) error {
+	_, err := m.db.Exec(`
+		INSERT OR IGNORE INTO bookmarks (note_path, order_index)
+		VALUES (?, COALESCE((SELECT MAX(order_index) FROM bookmarks), -1) + 1)`,
+		path)
+	return err
+}
+
+// UnpinNote removes a note from the bookmarks list.
+func (m *MetaStore) UnpinNote(path string) error {
+	_, err := m.db.Exec(`DELETE FROM bookmarks WHERE note_path = ?`, path)
+	return err
+}
+
+// IsPinned checks whether a note is bookmarked.
+func (m *MetaStore) IsPinned(path string) (bool, error) {
+	var count int
+	err := m.db.QueryRow(`SELECT COUNT(*) FROM bookmarks WHERE note_path = ?`, path).Scan(&count)
+	if err != nil {
+		return false, err
+	}
+	return count > 0, nil
+}
+
+// ListPinned returns bookmarked notes in order.
+func (m *MetaStore) ListPinned() ([]string, error) {
+	rows, err := m.db.Query(`SELECT note_path FROM bookmarks ORDER BY order_index`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var paths []string
+	for rows.Next() {
+		var p string
+		if err := rows.Scan(&p); err != nil {
+			return nil, err
+		}
+		paths = append(paths, p)
+	}
+	return paths, rows.Err()
 }
 
 // scanNotesWithTags scans rows of notes and attaches their tags.
