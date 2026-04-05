@@ -1,5 +1,8 @@
 # memoria
 
+[![CI](https://github.com/cassiomarques/memoria/actions/workflows/ci.yaml/badge.svg)](https://github.com/cassiomarques/memoria/actions/workflows/ci.yaml)
+[![Release](https://github.com/cassiomarques/memoria/actions/workflows/release.yaml/badge.svg)](https://github.com/cassiomarques/memoria/actions/workflows/release.yaml)
+
 A terminal-based note-taking app with full-text search, automatic git sync, and a beautiful TUI.
 
 Memoria keeps your notes as plain Markdown files organized in folders, indexes them for instant search, and automatically syncs everything to a git remote. Edit with your favourite editor, navigate with vim keybindings.
