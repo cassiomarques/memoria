@@ -148,12 +148,27 @@ func (c *CommandBar) AcceptSuggestion() bool {
 	val := c.input.Value()
 
 	// Find the first space (command separator).
-	// Replace everything after "command " with the suggestion.
 	firstSpace := strings.Index(val, " ")
 	if firstSpace == -1 {
 		c.input.SetValue(suggestion)
 	} else {
-		c.input.SetValue(val[:firstSpace+1] + suggestion)
+		// For multi-arg commands (e.g. "mv src dest"), find the start of the
+		// last argument and replace from there. The suggestion returned by
+		// Completions corresponds to the last (incomplete) argument.
+		cmdAndArgs := val[:firstSpace+1]
+		argsPart := val[firstSpace+1:]
+
+		// Find where the last argument starts by looking for the last space
+		// in the arguments portion.
+		lastSpace := strings.LastIndex(argsPart, " ")
+		if lastSpace == -1 {
+			// Only one argument so far
+			c.input.SetValue(cmdAndArgs + suggestion)
+		} else {
+			// Multiple arguments — keep everything up to and including the
+			// last space, then append the suggestion.
+			c.input.SetValue(cmdAndArgs + argsPart[:lastSpace+1] + suggestion)
+		}
 	}
 	c.input.CursorEnd()
 	c.DismissMenu()

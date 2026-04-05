@@ -1025,3 +1025,165 @@ func TestListRecent(t *testing.T) {
 		t.Errorf("expected 'third.md' first, got %q", recent[0].Path)
 	}
 }
+
+// --- Folder rename (moveFolder) tests ---
+
+func TestMoveFolder(t *testing.T) {
+	svc := setupService(t)
+
+	// Create a folder with 3 notes inside
+	_, err := svc.Create("OldFolder/note1", "First note", []string{"tag1"})
+	if err != nil {
+		t.Fatalf("Create note1: %v", err)
+	}
+	_, err = svc.Create("OldFolder/note2", "Second note", []string{"tag2"})
+	if err != nil {
+		t.Fatalf("Create note2: %v", err)
+	}
+	_, err = svc.Create("OldFolder/note3", "Third note", nil)
+	if err != nil {
+		t.Fatalf("Create note3: %v", err)
+	}
+
+	// Move the folder
+	if err := svc.Move("OldFolder/", "NewFolder"); err != nil {
+		t.Fatalf("Move folder: %v", err)
+	}
+
+	// Verify old folder no longer exists on disk
+	oldDir := filepath.Join(svc.files.Root(), "OldFolder")
+	if _, statErr := os.Stat(oldDir); !os.IsNotExist(statErr) {
+		t.Error("old folder still exists on disk after rename")
+	}
+
+	// Verify new folder exists on disk
+	newDir := filepath.Join(svc.files.Root(), "NewFolder")
+	info, statErr := os.Stat(newDir)
+	if statErr != nil {
+		t.Fatalf("new folder does not exist on disk: %v", statErr)
+	}
+	if !info.IsDir() {
+		t.Error("expected NewFolder to be a directory")
+	}
+
+	// Verify all notes have updated paths in metadata
+	for _, name := range []string{"note1.md", "note2.md", "note3.md"} {
+		newPath := "NewFolder/" + name
+		nm, getErr := svc.meta.GetNote(newPath)
+		if getErr != nil {
+			t.Errorf("GetNote(%s): %v", newPath, getErr)
+			continue
+		}
+		if nm.Folder != "NewFolder" {
+			t.Errorf("expected folder 'NewFolder' for %s, got %q", newPath, nm.Folder)
+		}
+	}
+
+	// Verify old paths no longer exist in metadata
+	for _, name := range []string{"note1.md", "note2.md", "note3.md"} {
+		oldPath := "OldFolder/" + name
+		_, getErr := svc.meta.GetNote(oldPath)
+		if !errors.Is(getErr, storage.ErrNoteNotFound) {
+			t.Errorf("expected ErrNoteNotFound for old path %s, got %v", oldPath, getErr)
+		}
+	}
+
+	// Verify notes are loadable from disk at new paths
+	for _, name := range []string{"note1.md", "note2.md", "note3.md"} {
+		newPath := "NewFolder/" + name
+		if !svc.files.Exists(newPath) {
+			t.Errorf("expected %s to exist on disk", newPath)
+		}
+	}
+}
+
+func TestMoveFolder_SameNameIsNoop(t *testing.T) {
+	svc := setupService(t)
+
+	_, err := svc.Create("MyFolder/note1", "Content", nil)
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+
+	// Move to the same name — should be a no-op
+	if err := svc.Move("MyFolder/", "MyFolder"); err != nil {
+		t.Fatalf("Move same name: %v", err)
+	}
+
+	// Folder and note should still exist
+	if !svc.files.Exists("MyFolder/note1.md") {
+		t.Error("note should still exist after no-op move")
+	}
+	nm, getErr := svc.meta.GetNote("MyFolder/note1.md")
+	if getErr != nil {
+		t.Fatalf("GetNote: %v", getErr)
+	}
+	if nm.Folder != "MyFolder" {
+		t.Errorf("expected folder 'MyFolder', got %q", nm.Folder)
+	}
+}
+
+func TestMoveFolder_DetectsDirectoryWithoutTrailingSlash(t *testing.T) {
+	svc := setupService(t)
+
+	_, err := svc.Create("SrcFolder/note1", "Content", nil)
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+
+	// Move without trailing slash — should still detect the directory
+	if err := svc.Move("SrcFolder", "DstFolder"); err != nil {
+		t.Fatalf("Move: %v", err)
+	}
+
+	// Verify move happened
+	if !svc.files.Exists("DstFolder/note1.md") {
+		t.Error("expected DstFolder/note1.md to exist")
+	}
+	_, getErr := svc.meta.GetNote("SrcFolder/note1.md")
+	if !errors.Is(getErr, storage.ErrNoteNotFound) {
+		t.Errorf("expected ErrNoteNotFound for old path, got %v", getErr)
+	}
+}
+
+func TestMoveFolder_NestedNotes(t *testing.T) {
+	svc := setupService(t)
+
+	// Create notes at multiple depth levels within the folder
+	_, err := svc.Create("Parent/note1", "Note 1", nil)
+	if err != nil {
+		t.Fatalf("Create note1: %v", err)
+	}
+	_, err = svc.Create("Parent/Sub/note2", "Note 2", nil)
+	if err != nil {
+		t.Fatalf("Create note2: %v", err)
+	}
+
+	if err := svc.Move("Parent/", "Renamed"); err != nil {
+		t.Fatalf("Move: %v", err)
+	}
+
+	// Top-level note should be moved
+	if !svc.files.Exists("Renamed/note1.md") {
+		t.Error("expected Renamed/note1.md to exist")
+	}
+	nm, getErr := svc.meta.GetNote("Renamed/note1.md")
+	if getErr != nil {
+		t.Fatalf("GetNote Renamed/note1.md: %v", getErr)
+	}
+	if nm.Folder != "Renamed" {
+		t.Errorf("expected folder 'Renamed', got %q", nm.Folder)
+	}
+
+	// Nested note should be moved
+	if !svc.files.Exists("Renamed/Sub/note2.md") {
+		t.Error("expected Renamed/Sub/note2.md to exist")
+	}
+	nm2, getErr := svc.meta.GetNote("Renamed/Sub/note2.md")
+	if getErr != nil {
+		t.Fatalf("GetNote Renamed/Sub/note2.md: %v", getErr)
+	}
+	if nm2.Folder != "Renamed/Sub" {
+		t.Errorf("expected folder 'Renamed/Sub', got %q", nm2.Folder)
+	}
+}

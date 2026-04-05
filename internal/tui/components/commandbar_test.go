@@ -138,3 +138,119 @@ func TestStatusBar_Message(t *testing.T) {
 		t.Error("expected message to be cleared")
 	}
 }
+
+// --- AcceptSuggestion tests ---
+
+func TestCommandBar_AcceptSuggestion_SingleArg(t *testing.T) {
+	cb := NewCommandBar()
+	cb.SetWidth(80)
+	_ = cb.Focus()
+	cb.input.SetValue("open Pro")
+	cb.SetSuggestions([]string{"Projects/note.md"})
+
+	// Show the menu and select first item
+	cb.CycleSuggestion()
+
+	ok := cb.AcceptSuggestion()
+	if !ok {
+		t.Fatal("expected AcceptSuggestion to return true")
+	}
+	got := cb.Value()
+	if got != "open Projects/note.md" {
+		t.Errorf("expected 'open Projects/note.md', got %q", got)
+	}
+}
+
+func TestCommandBar_AcceptSuggestion_MultiArg(t *testing.T) {
+	cb := NewCommandBar()
+	cb.SetWidth(80)
+	_ = cb.Focus()
+	cb.input.SetValue("mv Projects/file.md Pro")
+	cb.SetSuggestions([]string{"Projects/Other/"})
+
+	cb.CycleSuggestion()
+
+	ok := cb.AcceptSuggestion()
+	if !ok {
+		t.Fatal("expected AcceptSuggestion to return true")
+	}
+	got := cb.Value()
+	if got != "mv Projects/file.md Projects/Other/" {
+		t.Errorf("expected 'mv Projects/file.md Projects/Other/', got %q", got)
+	}
+}
+
+func TestCommandBar_AcceptSuggestion_CommandNameCompletion(t *testing.T) {
+	cb := NewCommandBar()
+	cb.SetWidth(80)
+	_ = cb.Focus()
+	cb.input.SetValue("op")
+	cb.SetSuggestions([]string{"open"})
+
+	cb.CycleSuggestion()
+
+	ok := cb.AcceptSuggestion()
+	if !ok {
+		t.Fatal("expected AcceptSuggestion to return true")
+	}
+	got := cb.Value()
+	if got != "open" {
+		t.Errorf("expected 'open', got %q", got)
+	}
+}
+
+func TestCommandBar_AcceptSuggestion_NoMenuNoOp(t *testing.T) {
+	cb := NewCommandBar()
+	cb.SetWidth(80)
+	_ = cb.Focus()
+	cb.input.SetValue("open ")
+	// No suggestions set, no menu shown
+
+	ok := cb.AcceptSuggestion()
+	if ok {
+		t.Error("expected AcceptSuggestion to return false when no menu")
+	}
+	if cb.Value() != "open " {
+		t.Errorf("value should be unchanged, got %q", cb.Value())
+	}
+}
+
+func TestCommandBar_AcceptSuggestion_DismissesMenu(t *testing.T) {
+	cb := NewCommandBar()
+	cb.SetWidth(80)
+	_ = cb.Focus()
+	cb.input.SetValue("open ")
+	cb.SetSuggestions([]string{"work/", "personal/"})
+
+	cb.CycleSuggestion()
+	if !cb.ShowingMenu() {
+		t.Fatal("expected menu to be showing")
+	}
+
+	cb.AcceptSuggestion()
+	if cb.ShowingMenu() {
+		t.Error("expected menu to be dismissed after accepting")
+	}
+}
+
+func TestCommandBar_AcceptSuggestion_NavigateAndAccept(t *testing.T) {
+	cb := NewCommandBar()
+	cb.SetWidth(80)
+	_ = cb.Focus()
+	cb.input.SetValue("open ")
+	cb.SetSuggestions([]string{"work/", "personal/", "ideas.md"})
+
+	// CycleSuggestion selects first (index 0 = "work/")
+	cb.CycleSuggestion()
+	// NextSuggestion moves to second (index 1 = "personal/")
+	cb.NextSuggestion()
+
+	ok := cb.AcceptSuggestion()
+	if !ok {
+		t.Fatal("expected AcceptSuggestion to return true")
+	}
+	got := cb.Value()
+	if got != "open personal/" {
+		t.Errorf("expected 'open personal/', got %q", got)
+	}
+}

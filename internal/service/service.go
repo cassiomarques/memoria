@@ -224,13 +224,25 @@ func (s *NoteService) DeleteFolder(folder string) (int, error) {
 
 // Move renames/moves a note across all stores.
 func (s *NoteService) Move(oldPath, newPath string) error {
+	// Check if oldPath is a folder (trailing slash or existing directory on disk).
+	oldIsDir := strings.HasSuffix(oldPath, "/")
+	oldClean := strings.TrimSuffix(oldPath, "/")
+	if !oldIsDir && s.files != nil {
+		info, err := os.Stat(s.files.AbsPath(oldClean))
+		if err == nil && info.IsDir() {
+			oldIsDir = true
+		}
+	}
+
+	if oldIsDir {
+		return s.moveFolder(oldClean, strings.TrimSuffix(newPath, "/"))
+	}
+
 	oldPath = ensureMD(oldPath)
 
-	// If newPath is a directory (trailing slash, or existing dir on disk, or no .md extension
-	// and not already containing a filename-like base), append the original filename.
+	// If newPath is a directory (trailing slash, or existing dir on disk), append the original filename.
 	isDir := strings.HasSuffix(newPath, "/")
 	if !isDir && s.files != nil {
-		// Check if the path is an existing directory on disk
 		info, err := os.Stat(s.files.AbsPath(newPath))
 		if err == nil && info.IsDir() {
 			isDir = true
@@ -271,6 +283,59 @@ func (s *NoteService) Move(oldPath, newPath string) error {
 
 	if s.repo != nil {
 		if err := s.repo.CommitAndPush("move " + oldPath + " → " + newPath); err != nil {
+			return fmt.Errorf("git commit: %w", err)
+		}
+	}
+
+	return nil
+}
+
+// moveFolder renames a folder by moving all notes inside it to the new folder path.
+func (s *NoteService) moveFolder(oldFolder, newFolder string) error {
+	if oldFolder == newFolder {
+		return nil
+	}
+
+	// Rename the directory on disk
+	absOld := s.files.AbsPath(oldFolder)
+	absNew := s.files.AbsPath(newFolder)
+
+	if err := os.MkdirAll(filepath.Dir(absNew), 0o755); err != nil {
+		return fmt.Errorf("creating parent dirs: %w", err)
+	}
+	if err := os.Rename(absOld, absNew); err != nil {
+		return fmt.Errorf("renaming folder: %w", err)
+	}
+
+	// Update all notes that were under the old folder in metadata and search index
+	notes, err := s.meta.ListAll()
+	if err != nil {
+		return fmt.Errorf("listing notes: %w", err)
+	}
+
+	prefix := oldFolder + "/"
+	for _, n := range notes {
+		if !strings.HasPrefix(n.Path, prefix) && n.Folder != oldFolder {
+			continue
+		}
+		oldNotePath := n.Path
+		newNotePath := newFolder + "/" + strings.TrimPrefix(n.Path, prefix)
+		newNoteFolder := filepath.Dir(newNotePath)
+
+		if err := s.meta.MoveNote(oldNotePath, newNotePath, newNoteFolder); err != nil {
+			return fmt.Errorf("updating metadata for %s: %w", oldNotePath, err)
+		}
+
+		if s.search != nil {
+			_ = s.search.Remove(oldNotePath)
+			if loaded, loadErr := s.files.Load(newNotePath); loadErr == nil {
+				_ = s.search.Index(loaded)
+			}
+		}
+	}
+
+	if s.repo != nil {
+		if err := s.repo.CommitAndPush("rename folder " + oldFolder + " → " + newFolder); err != nil {
 			return fmt.Errorf("git commit: %w", err)
 		}
 	}

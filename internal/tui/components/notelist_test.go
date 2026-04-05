@@ -1090,3 +1090,182 @@ func findSubstring(s, sub string) bool {
 	}
 	return false
 }
+
+// --- Timestamp toggle and formatRelativeTime tests ---
+
+func TestNoteList_ToggleShowModified(t *testing.T) {
+	nl := NewNoteList()
+
+	// First call should return true (enabled)
+	if got := nl.ToggleShowModified(); !got {
+		t.Error("expected ToggleShowModified to return true on first call")
+	}
+	// Second call should return false (disabled)
+	if got := nl.ToggleShowModified(); got {
+		t.Error("expected ToggleShowModified to return false on second call")
+	}
+	// Third call should return true again
+	if got := nl.ToggleShowModified(); !got {
+		t.Error("expected ToggleShowModified to return true on third call")
+	}
+}
+
+func TestNoteList_SetShowModified(t *testing.T) {
+	nl := NewNoteList()
+
+	nl.SetShowModified(true)
+	// Verify by toggling: if currently true, toggle returns false
+	if got := nl.ToggleShowModified(); got {
+		t.Error("expected false after SetShowModified(true) then toggle")
+	}
+
+	nl.SetShowModified(false)
+	// Verify by toggling: if currently false, toggle returns true
+	if got := nl.ToggleShowModified(); !got {
+		t.Error("expected true after SetShowModified(false) then toggle")
+	}
+}
+
+func TestFormatRelativeTime(t *testing.T) {
+	tests := []struct {
+		name     string
+		offset   time.Duration
+		expected string
+	}{
+		{
+			name:     "just now",
+			offset:   0,
+			expected: "just now",
+		},
+		{
+			name:     "30 seconds ago",
+			offset:   30 * time.Second,
+			expected: "just now",
+		},
+		{
+			name:     "1 minute ago",
+			offset:   time.Minute,
+			expected: "1m ago",
+		},
+		{
+			name:     "30 minutes ago",
+			offset:   30 * time.Minute,
+			expected: "30m ago",
+		},
+		{
+			name:     "1 hour ago",
+			offset:   time.Hour,
+			expected: "1h ago",
+		},
+		{
+			name:     "5 hours ago",
+			offset:   5 * time.Hour,
+			expected: "5h ago",
+		},
+		{
+			name:     "yesterday (36 hours ago)",
+			offset:   36 * time.Hour,
+			expected: "yesterday",
+		},
+		{
+			name:     "3 days ago",
+			offset:   3 * 24 * time.Hour,
+			expected: "3d ago",
+		},
+		{
+			name:     "6 days ago",
+			offset:   6 * 24 * time.Hour,
+			expected: "6d ago",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := formatRelativeTime(time.Now().Add(-tt.offset))
+			if result != tt.expected {
+				t.Errorf("formatRelativeTime(%v ago) = %q, want %q", tt.offset, result, tt.expected)
+			}
+		})
+	}
+}
+
+func TestFormatRelativeTime_OlderThanWeek(t *testing.T) {
+	// 30 days ago should produce a formatted date like "Dec 07"
+	target := time.Now().Add(-30 * 24 * time.Hour)
+	result := formatRelativeTime(target)
+	expected := target.Format("Jan 02")
+	if result != expected {
+		t.Errorf("formatRelativeTime(30 days ago) = %q, want %q", result, expected)
+	}
+}
+
+func TestNoteList_ViewShowsTimestamp(t *testing.T) {
+	now := time.Now()
+	items := []NoteItem{
+		{Path: "recent.md", Title: "recent", Folder: "", Modified: now.Add(-5 * time.Hour)},
+	}
+
+	nl := NewNoteList()
+	nl.SetSize(80, 20)
+	nl.SetShowModified(true)
+	nl.SetItems(items)
+
+	view := nl.View()
+	// Should contain the time string "5h ago"
+	if !containsSubstring(view, "5h ago") {
+		t.Errorf("expected view to contain '5h ago' when showModified=true, got:\n%s", view)
+	}
+}
+
+func TestNoteList_ViewHidesTimestamp(t *testing.T) {
+	now := time.Now()
+	items := []NoteItem{
+		{Path: "recent.md", Title: "recent", Folder: "", Modified: now.Add(-5 * time.Hour)},
+	}
+
+	nl := NewNoteList()
+	nl.SetSize(80, 20)
+	nl.SetShowModified(false) // timestamps OFF
+	nl.SetItems(items)
+
+	view := nl.View()
+	if containsSubstring(view, "5h ago") {
+		t.Errorf("expected view to NOT contain '5h ago' when showModified=false, got:\n%s", view)
+	}
+}
+
+func TestNoteList_ViewShowsTimestampInFolder(t *testing.T) {
+	now := time.Now()
+	items := []NoteItem{
+		{Path: "work/task.md", Title: "task", Folder: "Work", Modified: now.Add(-2 * time.Hour)},
+	}
+
+	nl := NewNoteList()
+	nl.SetSize(80, 20)
+	nl.SetShowModified(true)
+	nl.SetItems(items)
+
+	// Move cursor to the note (skip folder at index 0)
+	nl, _ = nl.Update(simpleKeyPress('j'))
+
+	view := nl.View()
+	if !containsSubstring(view, "2h ago") {
+		t.Errorf("expected view to contain '2h ago' for note in folder, got:\n%s", view)
+	}
+}
+
+func TestNoteList_ViewShowsJustNow(t *testing.T) {
+	items := []NoteItem{
+		{Path: "fresh.md", Title: "fresh", Folder: "", Modified: time.Now()},
+	}
+
+	nl := NewNoteList()
+	nl.SetSize(80, 20)
+	nl.SetShowModified(true)
+	nl.SetItems(items)
+
+	view := nl.View()
+	if !containsSubstring(view, "just now") {
+		t.Errorf("expected view to contain 'just now', got:\n%s", view)
+	}
+}

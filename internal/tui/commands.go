@@ -2,6 +2,7 @@ package tui
 
 import (
 	"fmt"
+	"path/filepath"
 	"strings"
 
 	"github.com/cassiomarques/memoria/internal/tui/components"
@@ -141,24 +142,47 @@ func completeMvCommand(argPart string, noteItems []components.NoteItem) []string
 	// Split on first space — the source path may contain spaces
 	spaceIdx := strings.Index(argPart, " ")
 
-	// No space: still typing the source path
+	// No space: still typing the source path (notes + folders)
 	if spaceIdx < 0 {
-		return completeNotePaths(argPart, noteItems)
+		return completePathSegments(argPart, noteItems, true)
 	}
 
-	// Space found — check if the path before it is a valid note
+	// Space found — check if the path before it is a valid note or folder
 	candidatePath := argPart[:spaceIdx]
-	isNote := false
+	isSource := false
+
+	// Check if it's a note path
 	for _, item := range noteItems {
 		if strings.EqualFold(item.Path, candidatePath) {
-			isNote = true
+			isSource = true
 			break
 		}
 	}
 
-	if !isNote {
-		// The space might be part of a path — keep completing note paths
-		return completeNotePaths(argPart, noteItems)
+	// Check if it's a folder path (with or without trailing slash)
+	if !isSource {
+		cleanCandidate := strings.TrimSuffix(candidatePath, "/")
+		for _, item := range noteItems {
+			folder := item.Folder
+			for folder != "" && folder != "." {
+				if strings.EqualFold(folder, cleanCandidate) {
+					isSource = true
+					break
+				}
+				folder = filepath.Dir(folder)
+				if folder == "." {
+					break
+				}
+			}
+			if isSource {
+				break
+			}
+		}
+	}
+
+	if !isSource {
+		// The space might be part of a path — keep completing
+		return completePathSegments(argPart, noteItems, true)
 	}
 
 	// Source confirmed, complete destination (folders)

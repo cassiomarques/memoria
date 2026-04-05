@@ -358,3 +358,89 @@ func TestCompletions_Mv(t *testing.T) {
 		}
 	})
 }
+
+func TestCompletions_Mv_SourceIncludesBothFilesAndFolders(t *testing.T) {
+	items := sampleNoteItems()
+	tags := sampleTags()
+
+	// Source completion with no prefix should show both files and folders
+	results := Completions("mv ", items, tags)
+	hasFolder := false
+	hasFile := false
+	for _, r := range results {
+		if r == "work/" || r == "personal/" {
+			hasFolder = true
+		}
+		if r == "ideas.md" {
+			hasFile = true
+		}
+	}
+	if !hasFolder {
+		t.Error("expected source completion to include folders")
+	}
+	if !hasFile {
+		t.Error("expected source completion to include files")
+	}
+}
+
+func TestCompletions_Mv_FolderSourceThenDestination(t *testing.T) {
+	items := sampleNoteItems()
+	tags := sampleTags()
+
+	// After typing a valid folder path + space, destination should complete with folders
+	results := Completions("mv work/ ", items, tags)
+	// "work" is a valid folder, so after space we get destination (folders only)
+	if len(results) == 0 {
+		t.Fatal("expected destination folder suggestions after folder source")
+	}
+	for _, r := range results {
+		if r != "" && r[len(r)-1] != '/' {
+			t.Errorf("expected only folder suggestions in destination, got %q", r)
+		}
+	}
+}
+
+func TestCompletions_Mv_SourceDrillsIntoFolder(t *testing.T) {
+	items := sampleNoteItems()
+	tags := sampleTags()
+
+	// Source completion for "work/" should show children (files + folders)
+	results := Completions("mv work/", items, tags)
+	// Should include work/meeting.md, work/todo.md, work/projects/
+	if len(results) != 3 {
+		t.Fatalf("expected 3 results drilling into work/, got %d: %v", len(results), results)
+	}
+}
+
+func TestCompletions_Mv_DestinationAfterFolderWithSlash(t *testing.T) {
+	items := []components.NoteItem{
+		{Path: "Projects/CodeCoverage/e2e.md", Title: "e2e", Folder: "Projects/CodeCoverage"},
+		{Path: "Archive/old.md", Title: "old", Folder: "Archive"},
+	}
+
+	// "Projects/CodeCoverage/" is a valid folder source, then space for destination
+	results := Completions("mv Projects/CodeCoverage/ ", items, nil)
+	if len(results) == 0 {
+		t.Fatal("expected destination suggestions after folder source with slash")
+	}
+	// All results should be folders
+	for _, r := range results {
+		if r != "" && r[len(r)-1] != '/' {
+			t.Errorf("expected only folder suggestions in destination, got %q", r)
+		}
+	}
+}
+
+func TestCompletions_Mv_PartialSourcePrefix(t *testing.T) {
+	items := sampleNoteItems()
+	tags := sampleTags()
+
+	// Partial prefix for source should filter matching paths
+	results := Completions("mv wo", items, tags)
+	if len(results) != 1 {
+		t.Fatalf("expected 1 result for prefix 'wo', got %d: %v", len(results), results)
+	}
+	if results[0] != "work/" {
+		t.Errorf("expected 'work/', got %q", results[0])
+	}
+}
