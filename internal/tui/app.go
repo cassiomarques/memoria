@@ -1330,13 +1330,62 @@ func (a *App) folderDisplay() string {
 const (
 	statusBarHeight  = 1
 	commandBarHeight = 1
+	headerHeight     = 10
 )
+
+// memoriaASCII is the ASCII art title.
+var memoriaASCII = []string{
+	"▗▄ ▄▖                      █",
+	"▐█ █▌                      ▀",
+	"▐███▌ ▟█▙ ▐█▙█▖ ▟█▙  █▟█▌ ██   ▟██▖",
+	"▐▌█▐▌▐▙▄▟▌▐▌█▐▌▐▛ ▜▌ █▘    █   ▘▄▟▌",
+	"▐▌▀▐▌▐▛▀▀▘▐▌█▐▌▐▌ ▐▌ █     █  ▗█▀▜▌",
+	"▐▌ ▐▌▝█▄▄▌▐▌█▐▌▝█▄█▘ █   ▗▄█▄▖▐▙▄█▌",
+	"▝▘ ▝▘ ▝▀▀ ▝▘▀▝▘ ▝▀▘  ▀   ▝▀▀▀▘ ▀▀▝▘",
+}
+
+// colorizeASCII applies Catppuccin colors to the ASCII art.
+func colorizeASCII(lines []string) string {
+	style := lipgloss.NewStyle().Foreground(theme.ColorLavender)
+	var result strings.Builder
+	for i, line := range lines {
+		result.WriteString(style.Render(line))
+		if i < len(lines)-1 {
+			result.WriteRune('\n')
+		}
+	}
+	return result.String()
+}
+
+func (a *App) renderHeader() string {
+	art := colorizeASCII(memoriaASCII)
+
+	tipKey := lipgloss.NewStyle().Foreground(theme.ColorMauve).Bold(true)
+	tipText := lipgloss.NewStyle().Foreground(theme.ColorOverlay1)
+	tip := tipText.Render("  Tip: ") +
+		tipKey.Render("?") + tipText.Render(" help · ") +
+		tipKey.Render(":") + tipText.Render(" commands · ") +
+		tipKey.Render("/") + tipText.Render(" search")
+
+	inner := art + "\n\n" + tip
+
+	return lipgloss.NewStyle().
+		Width(a.width).
+		Padding(0, 1).
+		BorderStyle(lipgloss.RoundedBorder()).
+		BorderForeground(theme.ColorSurface2).
+		BorderBottom(true).
+		BorderLeft(false).
+		BorderRight(false).
+		BorderTop(false).
+		Render(inner)
+}
 
 func (a *App) resizeComponents() {
 	a.statusBar.SetWidth(a.width)
 	a.commandBar.SetWidth(a.width)
 
-	contentHeight := a.height - statusBarHeight - commandBarHeight
+	contentHeight := a.height - statusBarHeight - commandBarHeight - headerHeight
 	if contentHeight < 1 {
 		contentHeight = 1
 	}
@@ -1384,6 +1433,7 @@ func (a App) View() tea.View {
 	statusView := a.statusBar.View()
 
 	content := lipgloss.JoinVertical(lipgloss.Left,
+		a.renderHeader(),
 		mainContent,
 		barView,
 		statusView,
