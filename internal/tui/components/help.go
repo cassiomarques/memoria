@@ -73,6 +73,8 @@ func (h Help) View() string {
 	b.WriteByte('\n')
 	b.WriteString(line("p", "Toggle preview"))
 	b.WriteByte('\n')
+	b.WriteString(line("t", "Toggle timestamps"))
+	b.WriteByte('\n')
 	b.WriteByte('\n')
 
 	b.WriteString(heading.Render("Commands (press : to enter)"))

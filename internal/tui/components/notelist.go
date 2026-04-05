@@ -46,17 +46,18 @@ func (t *treeNode) countNotes() int {
 
 // NoteList is a scrollable tree view of notes organized by folder.
 type NoteList struct {
-	items       []NoteItem
-	tree        []*treeNode
-	flatVisible []*treeNode
-	cursor      int
-	offset      int
-	height      int
-	width       int
-	styles      theme.Styles
-	expandAll   bool // whether all folders start expanded
-	showPinned  bool // whether to show virtual "Pinned" section at top
-	filterText  string
+	items        []NoteItem
+	tree         []*treeNode
+	flatVisible  []*treeNode
+	cursor       int
+	offset       int
+	height       int
+	width        int
+	styles       theme.Styles
+	expandAll    bool // whether all folders start expanded
+	showPinned   bool // whether to show virtual "Pinned" section at top
+	showModified bool // whether to show modification timestamps
+	filterText   string
 
 	// gg detection: true after first 'g' press
 	pendingG bool
@@ -79,6 +80,17 @@ func (n *NoteList) SetExpandAll(v bool) {
 // SetShowPinned sets whether the virtual "📌 Pinned" section appears at the top.
 func (n *NoteList) SetShowPinned(v bool) {
 	n.showPinned = v
+}
+
+// ToggleShowModified toggles whether modification timestamps are shown next to notes.
+func (n *NoteList) ToggleShowModified() bool {
+	n.showModified = !n.showModified
+	return n.showModified
+}
+
+// SetShowModified sets whether modification timestamps are shown next to notes.
+func (n *NoteList) SetShowModified(v bool) {
+	n.showModified = v
 }
 
 func (n *NoteList) SetItems(items []NoteItem) {
@@ -491,7 +503,14 @@ func (n NoteList) renderNode(visibleIndex int) string {
 	if node.noteItem != nil && node.noteItem.Pinned {
 		displayTitle = "📌 " + displayTitle
 	}
-	overhead := 4 + 2*node.depth
+
+	// Build optional timestamp suffix
+	timeSuffix := ""
+	if n.showModified && node.noteItem != nil && !node.noteItem.Modified.IsZero() {
+		timeSuffix = " " + formatRelativeTime(node.noteItem.Modified)
+	}
+
+	overhead := 4 + 2*node.depth + len(timeSuffix)
 	if node.depth > 0 {
 		overhead += 4 // tree connector
 	}
@@ -508,18 +527,20 @@ func (n NoteList) renderNode(visibleIndex int) string {
 		titleStyle = n.styles.NoteItemSel
 	}
 
+	timeStyle := lipgloss.NewStyle().Foreground(theme.ColorOverlay1)
+
 	if node.depth > 0 {
 		connector := "├── "
 		if node.isLastChild {
 			connector = "└── "
 		}
 		connStyle := lipgloss.NewStyle().Foreground(theme.ColorOverlay0)
-		line := indicator + indent + connStyle.Render(connector) + titleStyle.Render(displayTitle)
+		line := indicator + indent + connStyle.Render(connector) + titleStyle.Render(displayTitle) + timeStyle.Render(timeSuffix)
 		return lipgloss.NewStyle().Width(n.width).Render(line)
 	}
 
 	// Root-level note
-	line := indicator + titleStyle.Render(displayTitle)
+	line := indicator + titleStyle.Render(displayTitle) + timeStyle.Render(timeSuffix)
 	return lipgloss.NewStyle().Width(n.width).Render(line)
 }
 
@@ -833,4 +854,31 @@ func (n *NoteList) FilteredCount() int {
 		}
 	})
 	return count
+}
+
+// formatRelativeTime returns a human-friendly relative time string.
+func formatRelativeTime(t time.Time) string {
+	diff := time.Since(t)
+	switch {
+	case diff < time.Minute:
+		return "just now"
+	case diff < time.Hour:
+		m := int(diff.Minutes())
+		if m == 1 {
+			return "1m ago"
+		}
+		return fmt.Sprintf("%dm ago", m)
+	case diff < 24*time.Hour:
+		h := int(diff.Hours())
+		if h == 1 {
+			return "1h ago"
+		}
+		return fmt.Sprintf("%dh ago", h)
+	case diff < 48*time.Hour:
+		return "yesterday"
+	case diff < 7*24*time.Hour:
+		return fmt.Sprintf("%dd ago", int(diff.Hours()/24))
+	default:
+		return t.Format("Jan 02")
+	}
 }

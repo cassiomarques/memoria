@@ -19,16 +19,19 @@ type Config struct {
 	Editor          string `yaml:"editor,omitempty"`
 	ExpandFolders   *bool  `yaml:"expand_folders,omitempty"`
 	ShowPinnedNotes *bool  `yaml:"show_pinned_notes,omitempty"`
+	ShowTimestamps  *bool  `yaml:"show_timestamps,omitempty"`
 }
 
 // DefaultConfig returns a Config with sensible defaults.
 func DefaultConfig() *Config {
 	expandDefault := true
 	showPinned := true
+	showTimestamps := true
 	return &Config{
 		NotesDir:        filepath.Join(DefaultConfigDir(), "notes"),
 		ExpandFolders:   &expandDefault,
 		ShowPinnedNotes: &showPinned,
+		ShowTimestamps:  &showTimestamps,
 	}
 }
 
@@ -79,6 +82,15 @@ func (c *Config) ResolveShowPinnedNotes() bool {
 		return true
 	}
 	return *c.ShowPinnedNotes
+}
+
+// ResolveShowTimestamps returns whether to show modification timestamps.
+// Defaults to true if not set.
+func (c *Config) ResolveShowTimestamps() bool {
+	if c.ShowTimestamps == nil {
+		return true
+	}
+	return *c.ShowTimestamps
 }
 
 // ResolveEditor returns the editor to use, checking in order:

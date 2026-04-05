@@ -89,6 +89,7 @@ func NewApp() App {
 type AppOptions struct {
 	ExpandFolders   bool
 	ShowPinnedNotes bool
+	ShowTimestamps  bool
 }
 
 // NewAppWithService creates an App wired to the NoteService, loading initial data.
@@ -96,6 +97,7 @@ func NewAppWithService(svc *service.NoteService, opts AppOptions) App {
 	noteList := components.NewNoteList()
 	noteList.SetExpandAll(opts.ExpandFolders)
 	noteList.SetShowPinned(opts.ShowPinnedNotes)
+	noteList.SetShowModified(opts.ShowTimestamps)
 
 	a := App{
 		noteList:    noteList,
@@ -299,6 +301,14 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			case "b":
 				a.togglePin()
 				return a, nil
+			case "t":
+				show := a.noteList.ToggleShowModified()
+				if show {
+					a.setMessage("🕐 Showing modification times", false)
+				} else {
+					a.setMessage("🕐 Hiding modification times", false)
+				}
+				return a, clearMessageCmd()
 			}
 		} else {
 			// Command bar is active

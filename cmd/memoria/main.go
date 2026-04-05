@@ -131,6 +131,7 @@ func run(homeDir string) error {
 	app := tui.NewAppWithService(svc, tui.AppOptions{
 		ExpandFolders:   cfg.ResolveExpandFolders(),
 		ShowPinnedNotes: cfg.ResolveShowPinnedNotes(),
+		ShowTimestamps:  cfg.ResolveShowTimestamps(),
 	})
 
 	// Run Bubble Tea program
