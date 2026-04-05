@@ -108,6 +108,9 @@ func (p *Preview) Toggle() { p.visible = !p.visible }
 // Visible reports whether the preview is visible.
 func (p Preview) Visible() bool { return p.visible }
 
+// Content returns the raw markdown content.
+func (p Preview) Content() string { return p.content }
+
 // SetFocused sets the focus state for visual styling.
 func (p *Preview) SetFocused(focused bool) { p.focused = focused }
 

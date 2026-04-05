@@ -7,6 +7,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/atotto/clipboard"
+
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 	"github.com/cassiomarques/memoria/internal/service"
@@ -253,6 +255,12 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					cmd := a.openInEditor(a.previewedPath)
 					return a, cmd
 				}
+			case "y":
+				// Copy previewed note content to clipboard
+				if a.focusedPane == focusPreview && a.preview.Visible() {
+					a.copyPreviewToClipboard()
+					return a, nil
+				}
 			case "enter":
 				// Open selected note in editor
 				if a.svc != nil {
@@ -498,6 +506,20 @@ func (a *App) togglePin() {
 	} else {
 		a.setMessage("Removed bookmark: "+sel.Title, false)
 	}
+}
+
+// copyPreviewToClipboard copies the raw markdown of the previewed note to the system clipboard.
+func (a *App) copyPreviewToClipboard() {
+	content := a.preview.Content()
+	if content == "" {
+		a.setMessage("Nothing to copy", false)
+		return
+	}
+	if err := clipboard.WriteAll(content); err != nil {
+		a.setMessage("Copy failed: "+err.Error(), true)
+		return
+	}
+	a.setMessage("📋 Copied to clipboard", false)
 }
 
 // initiateCreate starts the create-note-in-folder flow.
@@ -1127,6 +1149,7 @@ func (a *App) cmdHelp() {
 | **Tab** | Switch focus / autocomplete |
 | **p** | Preview selected note |
 | **e** | Edit previewed note (when preview focused) |
+| **y** | Copy note content to clipboard (when preview focused) |
 | **d** | Delete selected note or folder |
 | **n** | Create a new note (in focused folder) |
 | **b** | Toggle bookmark on selected note |
