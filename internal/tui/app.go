@@ -3,6 +3,7 @@ package tui
 import (
 	"fmt"
 	"os/exec"
+	"strconv"
 	"strings"
 	"time"
 
@@ -670,6 +671,10 @@ func (a *App) executeCommand(cmd *Command) tea.Cmd {
 		return a.cmdOpen(cmd.Args)
 	case "search":
 		return a.cmdSearch(cmd.Args)
+	case "recent":
+		return a.cmdRecent(cmd.Args)
+	case "all":
+		return a.cmdAll()
 	case "tag":
 		return a.cmdTag(cmd.Args)
 	case "untag":
@@ -776,6 +781,49 @@ func (a *App) cmdSearch(args []string) tea.Cmd {
 	a.noteList.SetItems(items)
 	a.statusBar.SetNoteCount(len(items))
 	a.setMessage(fmt.Sprintf("Found %d results for %q", len(items), query), false)
+	return nil
+}
+
+func (a *App) cmdRecent(args []string) tea.Cmd {
+	if a.svc == nil {
+		a.setMessage("No service configured", true)
+		return nil
+	}
+
+	limit := 20
+	if len(args) > 0 {
+		if n, err := strconv.Atoi(args[0]); err == nil && n > 0 {
+			limit = n
+		}
+	}
+
+	recent, err := a.svc.ListRecent(limit)
+	if err != nil {
+		a.setMessage("Recent failed: "+err.Error(), true)
+		return nil
+	}
+
+	var items []components.NoteItem
+	for _, nm := range recent {
+		items = append(items, components.NoteItem{
+			Path:     nm.Path,
+			Title:    nm.Title,
+			Folder:   nm.Folder,
+			Tags:     nm.Tags,
+			Modified: nm.Modified,
+		})
+	}
+
+	a.noteList.SetItems(items)
+	a.statusBar.SetNoteCount(len(items))
+	a.setMessage(fmt.Sprintf("📋 %d most recent notes", len(items)), false)
+	return nil
+}
+
+func (a *App) cmdAll() tea.Cmd {
+	a.currentFolder = ""
+	_ = a.refreshNoteList()
+	a.setMessage("Showing all notes", false)
 	return nil
 }
 
@@ -1055,6 +1103,8 @@ func (a *App) cmdHelp() {
 | **new** *path* [tags...] | Create a new note and open in editor |
 | **open** *path* | Open a note in your editor |
 | **search** *query* | Fuzzy search notes |
+| **recent** [N] | Show N most recently modified notes (default 20) |
+| **all** | Show all notes (reset filtered/recent view) |
 | **tag** *path* *tag1* [tag2...] | Add tags to a note |
 | **untag** *path* *tag1* [tag2...] | Remove tags from a note |
 | **ls** [folder] | List notes (optionally in a folder) |

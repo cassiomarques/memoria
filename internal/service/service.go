@@ -415,6 +415,11 @@ func (s *NoteService) ListPinned() ([]string, error) {
 	return s.meta.ListPinned()
 }
 
+// ListRecent returns the most recently modified notes.
+func (s *NoteService) ListRecent(limit int) ([]*storage.NoteMeta, error) {
+	return s.meta.ListRecent(limit)
+}
+
 // Sync pulls from git (if configured), then reloads all notes from disk
 // and re-indexes them in metadata and search.
 func (s *NoteService) Sync() error {

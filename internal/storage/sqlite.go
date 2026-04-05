@@ -320,7 +320,18 @@ func (m *MetaStore) ListPinned() ([]string, error) {
 	return paths, rows.Err()
 }
 
-// scanNotesWithTags scans rows of notes and attaches their tags.
+// ListRecent returns notes ordered by most recently modified.
+func (m *MetaStore) ListRecent(limit int) ([]*NoteMeta, error) {
+	rows, err := m.db.Query(
+		`SELECT path, title, folder, created, modified FROM notes ORDER BY modified DESC LIMIT ?`,
+		limit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	return m.scanNotesWithTags(rows)
+}
 func (m *MetaStore) scanNotesWithTags(rows *sql.Rows) ([]*NoteMeta, error) {
 	var notes []*NoteMeta
 	for rows.Next() {

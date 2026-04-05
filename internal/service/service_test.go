@@ -1001,3 +1001,27 @@ func TestListPinned(t *testing.T) {
 		t.Errorf("unexpected pin order: %v", pins)
 	}
 }
+
+func TestListRecent(t *testing.T) {
+	svc := setupService(t)
+
+	for _, name := range []string{"first.md", "second.md", "third.md"} {
+		if _, err := svc.Create(name, "", nil); err != nil {
+			t.Fatal(err)
+		}
+		// Small delay so modified times differ
+		time.Sleep(50 * time.Millisecond)
+	}
+
+	recent, err := svc.ListRecent(2)
+	if err != nil {
+		t.Fatalf("ListRecent: %v", err)
+	}
+	if len(recent) != 2 {
+		t.Fatalf("expected 2, got %d", len(recent))
+	}
+	// Most recently created should be first
+	if recent[0].Path != "third.md" {
+		t.Errorf("expected 'third.md' first, got %q", recent[0].Path)
+	}
+}

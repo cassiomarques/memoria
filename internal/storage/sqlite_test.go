@@ -476,3 +476,47 @@ func TestPinNote_DeletedViaCascade(t *testing.T) {
 		t.Errorf("expected 0 pins after delete, got %d", len(pins))
 	}
 }
+
+func TestListRecent(t *testing.T) {
+	store := newTestStore(t)
+
+	// Create notes with different modified times
+	for i, name := range []string{"old.md", "mid.md", "new.md"} {
+		n := makeNote(t, name, "content", nil)
+		n.Modified = time.Date(2025, 1, 1+i, 0, 0, 0, 0, time.UTC)
+		if err := store.UpsertNote(n); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	recent, err := store.ListRecent(2)
+	if err != nil {
+		t.Fatalf("ListRecent: %v", err)
+	}
+	if len(recent) != 2 {
+		t.Fatalf("expected 2 recent, got %d", len(recent))
+	}
+	if recent[0].Path != "new.md" {
+		t.Errorf("expected newest first, got %q", recent[0].Path)
+	}
+	if recent[1].Path != "mid.md" {
+		t.Errorf("expected second newest, got %q", recent[1].Path)
+	}
+}
+
+func TestListRecent_LimitExceedsTotal(t *testing.T) {
+	store := newTestStore(t)
+
+	n := makeNote(t, "only.md", "content", nil)
+	if err := store.UpsertNote(n); err != nil {
+		t.Fatal(err)
+	}
+
+	recent, err := store.ListRecent(100)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(recent) != 1 {
+		t.Errorf("expected 1 note, got %d", len(recent))
+	}
+}
