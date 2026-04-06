@@ -276,6 +276,86 @@ func TestApp_AutoPreview_SkipsOnFolder(t *testing.T) {
 	}
 }
 
+func TestApp_AutoPreview_SkipsCustomPreview(t *testing.T) {
+	a := newTestApp()
+
+	// Navigate to a note (skip folders)
+	for a.noteList.SelectedItem() == nil {
+		a.noteList.MoveDown()
+	}
+
+	// Simulate what cmdTags() does: show custom content in preview
+	a.preview.SetContent("Tags", "# Tags\n\n- **#daily** (2 notes)")
+	a.previewedPath = ""
+	a.customPreview = true
+	if !a.preview.Visible() {
+		a.preview.Toggle()
+	}
+
+	// Simulate the auto-preview logic that runs on the next Update cycle
+	// (e.g., triggered by clearMessageCmd). With the fix, customPreview
+	// prevents the auto-preview from overwriting custom content.
+	if a.preview.Visible() && a.focusedPane == focusList && !a.customPreview {
+		if sel := a.noteList.SelectedItem(); sel != nil && sel.Path != a.previewedPath {
+			a.loadPreview(sel)
+		}
+	}
+
+	// The custom content should NOT have been overwritten
+	if a.previewedPath != "" {
+		t.Errorf("expected previewedPath to remain empty (custom content), got %q", a.previewedPath)
+	}
+}
+
+func TestApp_AutoPreview_ResumesAfterCustomPreview(t *testing.T) {
+	a := newTestApp()
+
+	// Navigate to a note
+	for a.noteList.SelectedItem() == nil {
+		a.noteList.MoveDown()
+	}
+
+	// Show custom content (e.g., tags)
+	a.preview.SetContent("Tags", "# Tags\n\n- **#daily** (2 notes)")
+	a.previewedPath = ""
+	a.customPreview = true
+	if !a.preview.Visible() {
+		a.preview.Toggle()
+	}
+
+	// User presses 'p' to preview a note — loadPreview clears customPreview
+	sel := a.noteList.SelectedItem()
+	a.loadPreview(sel)
+
+	if a.customPreview {
+		t.Error("expected customPreview to be false after loadPreview")
+	}
+	if a.previewedPath != sel.Path {
+		t.Errorf("expected previewedPath %q, got %q", sel.Path, a.previewedPath)
+	}
+
+	// Navigate to a different note
+	a.noteList.MoveDown()
+	for a.noteList.SelectedItem() == nil {
+		a.noteList.MoveDown()
+	}
+	next := a.noteList.SelectedItem()
+	if next.Path == sel.Path {
+		t.Skip("could not navigate to a different note")
+	}
+
+	// Auto-preview should work after loadPreview cleared customPreview
+	if a.preview.Visible() && a.focusedPane == focusList && !a.customPreview {
+		if s := a.noteList.SelectedItem(); s != nil && s.Path != a.previewedPath {
+			a.loadPreview(s)
+		}
+	}
+
+	if a.previewedPath != next.Path {
+		t.Errorf("expected auto-preview to resume, previewedPath %q, want %q", a.previewedPath, next.Path)
+	}
+}
+
 func TestApp_RenderFilterBar(t *testing.T) {
 	a := newTestApp()
 	a.filterMode = true

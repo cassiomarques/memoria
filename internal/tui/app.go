@@ -49,6 +49,9 @@ type App struct {
 	focusedPane focusedPane
 	// Track which note is currently previewed
 	previewedPath string
+	// customPreview is true when the preview pane shows non-note content
+	// (e.g., tags list, help). Auto-preview should not overwrite it.
+	customPreview bool
 
 	width  int
 	height int
@@ -414,8 +417,8 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		cmds = append(cmds, cmd)
 	}
 
-	// Auto-update preview when navigating the tree
-	if a.preview.Visible() && a.focusedPane == focusList {
+	// Auto-update preview when navigating the tree (skip custom content like tags/help)
+	if a.preview.Visible() && a.focusedPane == focusList && !a.customPreview {
 		if sel := a.noteList.SelectedItem(); sel != nil && sel.Path != a.previewedPath {
 			a.loadPreview(sel)
 		}
@@ -443,6 +446,7 @@ func (a *App) loadPreview(sel *components.NoteItem) {
 		a.preview.SetContent(sel.Title, fmt.Sprintf("# %s\n\n*No service configured*", sel.Title))
 	}
 	a.previewedPath = sel.Path
+	a.customPreview = false
 }
 
 // initiateDelete starts the delete confirmation flow for the selected item.
@@ -1051,7 +1055,8 @@ func (a *App) cmdTags() tea.Cmd {
 		lines = append(lines, fmt.Sprintf("- **#%s** (%d notes)", t.Tag, t.Count))
 	}
 	a.preview.SetContent("Tags", strings.Join(lines, "\n"))
-	a.previewedPath = "" // not a note preview
+	a.previewedPath = ""
+	a.customPreview = true
 	if !a.preview.Visible() {
 		a.preview.Toggle()
 		a.resizeComponents()
@@ -1180,7 +1185,8 @@ func (a *App) cmdHelp() {
 | **q** | Quit (when only tree visible) |
 `
 	a.preview.SetContent("Help", helpContent)
-	a.previewedPath = "" // not a note preview
+	a.previewedPath = ""
+	a.customPreview = true
 	if !a.preview.Visible() {
 		a.preview.Toggle()
 		a.resizeComponents()
