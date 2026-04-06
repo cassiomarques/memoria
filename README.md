@@ -3,13 +3,15 @@
 [![CI](https://github.com/cassiomarques/memoria/actions/workflows/ci.yaml/badge.svg)](https://github.com/cassiomarques/memoria/actions/workflows/ci.yaml)
 [![Release](https://github.com/cassiomarques/memoria/actions/workflows/release.yaml/badge.svg)](https://github.com/cassiomarques/memoria/actions/workflows/release.yaml)
 
-A terminal-based note-taking app with full-text search, automatic git sync, and a beautiful TUI.
+A terminal-based note-taking app with full-text search, automatic git sync, editor integration and other niceties. 
 
 Memoria keeps your notes as plain Markdown files organized in folders, indexes them for instant search, and automatically syncs everything to a git remote. Edit with your favourite editor, navigate with vim keybindings.
 
+![Memoria - Notes tree with preview](assets/notes-with-preview.jpg)
+
 ## Features
 
-- **Plain Markdown** — Notes are `.md` files with YAML frontmatter. No lock-in.
+- **Plain Markdown** — Notes are `.md` files with YAML frontmatter. 
 - **Full-text search** — Powered by [Bleve](https://blevesearch.com/). Fuzzy, typo-tolerant, instant.
 - **Automatic git sync** — Every create, edit, delete, move, and tag change is committed and pushed.
 - **Folder hierarchy** — Organize notes in nested folders. Collapsible tree view in the TUI.
