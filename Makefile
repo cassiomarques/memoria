@@ -9,7 +9,7 @@ LDFLAGS = -s -w -X main.version=$(VERSION)
 
 build:
 	@mkdir -p $(BUILD_DIR)
-	go build -o $(BUILD_DIR)/$(BINARY_NAME) $(MAIN)
+	go build -ldflags "$(LDFLAGS)" -o $(BUILD_DIR)/$(BINARY_NAME) $(MAIN)
 
 run:
 	go run $(MAIN)

@@ -71,6 +71,8 @@ type App struct {
 	// Fuzzy filter mode (/ key)
 	filterMode bool
 	filterBuf  string // current filter text
+
+	version string
 }
 
 // NewApp creates a new App with all sub-components initialized (no service).
@@ -90,6 +92,7 @@ type AppOptions struct {
 	ExpandFolders   bool
 	ShowPinnedNotes bool
 	ShowTimestamps  bool
+	Version         string
 }
 
 // NewAppWithService creates an App wired to the NoteService, loading initial data.
@@ -107,6 +110,7 @@ func NewAppWithService(svc *service.NoteService, opts AppOptions) App {
 		focusedPane: focusList,
 		styles:      theme.DefaultStyles(),
 		svc:         svc,
+		version:     opts.Version,
 	}
 
 	_ = a.refreshNoteList()
@@ -1128,7 +1132,7 @@ func (a *App) cmdRemote(args []string) tea.Cmd {
 }
 
 func (a *App) cmdHelp() {
-	helpContent := `# Remember — Commands
+	helpContent := `# Memoria — Commands
 
 | Command | Description |
 |---------|-------------|
@@ -1370,6 +1374,12 @@ func colorizeASCII(lines []string) string {
 func (a *App) renderHeader() string {
 	art := colorizeASCII(memoriaASCII)
 
+	versionStyle := lipgloss.NewStyle().Foreground(theme.ColorOverlay0).Italic(true)
+	versionLabel := ""
+	if a.version != "" {
+		versionLabel = versionStyle.Render("v" + a.version)
+	}
+
 	tipKey := lipgloss.NewStyle().Foreground(theme.ColorMauve).Bold(true)
 	tipText := lipgloss.NewStyle().Foreground(theme.ColorOverlay1)
 	tip := tipText.Render("  Tip: ") +
@@ -1377,7 +1387,11 @@ func (a *App) renderHeader() string {
 		tipKey.Render(":") + tipText.Render(" commands · ") +
 		tipKey.Render("/") + tipText.Render(" search")
 
-	inner := art + "\n\n" + tip
+	inner := art
+	if versionLabel != "" {
+		inner += "  " + versionLabel
+	}
+	inner += "\n\n" + tip
 
 	return lipgloss.NewStyle().
 		Width(a.width).

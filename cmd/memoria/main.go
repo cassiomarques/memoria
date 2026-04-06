@@ -132,6 +132,7 @@ func run(homeDir string) error {
 		ExpandFolders:   cfg.ResolveExpandFolders(),
 		ShowPinnedNotes: cfg.ResolveShowPinnedNotes(),
 		ShowTimestamps:  cfg.ResolveShowTimestamps(),
+		Version:         version,
 	})
 
 	// Run Bubble Tea program
