@@ -109,3 +109,25 @@ func TestPreview_ViewWithContent(t *testing.T) {
 		t.Errorf("expected title in view, got: %q", view)
 	}
 }
+
+func TestPreview_EstimateSourceLine_AtTop(t *testing.T) {
+	p := NewPreview()
+	p.SetSize(80, 24)
+	p.SetContent("Test", "line1\nline2\nline3\nline4\nline5")
+
+	// At top, should return line 1
+	line := p.EstimateSourceLine()
+	if line != 1 {
+		t.Errorf("expected line 1 at top, got %d", line)
+	}
+}
+
+func TestPreview_EstimateSourceLine_EmptyContent(t *testing.T) {
+	p := NewPreview()
+	p.SetSize(80, 24)
+
+	line := p.EstimateSourceLine()
+	if line != 1 {
+		t.Errorf("expected line 1 for empty content, got %d", line)
+	}
+}

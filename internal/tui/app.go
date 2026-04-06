@@ -258,7 +258,7 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			case "e":
 				// Edit the previewed note when preview is focused
 				if a.focusedPane == focusPreview && a.preview.Visible() && a.previewedPath != "" {
-					cmd := a.openInEditor(a.previewedPath)
+					cmd := a.openInEditor(a.previewedPath, a.preview.EstimateSourceLine())
 					return a, cmd
 				}
 			case "y":
@@ -272,7 +272,7 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				if a.svc != nil {
 					sel := a.noteList.SelectedItem()
 					if sel != nil {
-						cmd := a.openInEditor(sel.Path)
+						cmd := a.openInEditor(sel.Path, 0)
 						return a, cmd
 					}
 				}
@@ -414,8 +414,12 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		cmds = append(cmds, cmd)
 	}
 
-	// Update preview when selected note changes
-	// (removed auto-sync: preview now loads on-demand via 'p')
+	// Auto-update preview when navigating the tree
+	if a.preview.Visible() && a.focusedPane == focusList {
+		if sel := a.noteList.SelectedItem(); sel != nil && sel.Path != a.previewedPath {
+			a.loadPreview(sel)
+		}
+	}
 
 	// Schedule auto-clear for status messages
 	if a.pendingClear {
@@ -767,7 +771,7 @@ func (a *App) cmdNew(args []string) tea.Cmd {
 
 	_ = a.refreshNoteList()
 	a.refreshTags()
-	return a.openInEditor(path)
+	return a.openInEditor(path, 0)
 }
 
 func (a *App) cmdOpen(args []string) tea.Cmd {
@@ -777,7 +781,7 @@ func (a *App) cmdOpen(args []string) tea.Cmd {
 	}
 
 	path := args[0]
-	return a.openInEditor(path)
+	return a.openInEditor(path, 0)
 }
 
 func (a *App) cmdSearch(args []string) tea.Cmd {
@@ -1185,7 +1189,8 @@ func (a *App) cmdHelp() {
 }
 
 // openInEditor launches the configured editor for the given note path.
-func (a *App) openInEditor(notePath string) tea.Cmd {
+// If lineNum > 0, passes +N to jump to that line (works with vim, nvim, nano, emacs, etc.).
+func (a *App) openInEditor(notePath string, lineNum int) tea.Cmd {
 	if a.svc == nil {
 		a.setMessage("No service configured", true)
 		return nil
@@ -1203,12 +1208,12 @@ func (a *App) openInEditor(notePath string) tea.Cmd {
 	}
 
 	parts := strings.Fields(editorCmd)
-	var c *exec.Cmd
-	if len(parts) > 1 {
-		c = exec.Command(parts[0], append(parts[1:], absPath)...)
-	} else {
-		c = exec.Command(parts[0], absPath)
+	args := parts[1:]
+	if lineNum > 0 {
+		args = append(args, fmt.Sprintf("+%d", lineNum))
 	}
+	args = append(args, absPath)
+	c := exec.Command(parts[0], args...)
 
 	path := notePath
 	return tea.ExecProcess(c, func(err error) tea.Msg {
@@ -1235,7 +1240,7 @@ func (a App) handleFilterKey(key string) (tea.Model, tea.Cmd) {
 		_ = a.refreshNoteList()
 		a.statusBar.ClearMessage()
 		if sel != nil && a.svc != nil {
-			cmd := a.openInEditor(sel.Path)
+			cmd := a.openInEditor(sel.Path, 0)
 			return a, cmd
 		}
 		return a, nil

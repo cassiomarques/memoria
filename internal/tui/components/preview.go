@@ -129,6 +129,26 @@ func (p *Preview) ScrollToTop() { p.viewport.GotoTop() }
 // ScrollToBottom scrolls to the bottom.
 func (p *Preview) ScrollToBottom() { p.viewport.GotoBottom() }
 
+// EstimateSourceLine returns the approximate source line number corresponding
+// to the top of the viewport. Because glamour rendering changes line counts,
+// we use the scroll ratio to map back to the raw markdown line count.
+func (p Preview) EstimateSourceLine() int {
+	totalRendered := p.viewport.TotalLineCount()
+	if totalRendered == 0 {
+		return 1
+	}
+	sourceLines := strings.Count(p.content, "\n") + 1
+	ratio := float64(p.viewport.YOffset()) / float64(totalRendered)
+	line := int(ratio*float64(sourceLines)) + 1
+	if line < 1 {
+		line = 1
+	}
+	if line > sourceLines {
+		line = sourceLines
+	}
+	return line
+}
+
 func (p Preview) Init() tea.Cmd { return nil }
 
 func (p Preview) Update(msg tea.Msg) (Preview, tea.Cmd) {

@@ -201,6 +201,81 @@ func TestApp_HandleFilterKey_Space(t *testing.T) {
 	}
 }
 
+func TestApp_AutoPreview_UpdatesOnNavigate(t *testing.T) {
+	a := newTestApp()
+	a.preview.Toggle() // open preview
+
+	// Navigate down until we land on a note
+	for a.noteList.SelectedItem() == nil {
+		a.noteList.MoveDown()
+	}
+	first := a.noteList.SelectedItem()
+
+	// Simulate the auto-preview logic from Update
+	if sel := a.noteList.SelectedItem(); sel != nil && sel.Path != a.previewedPath {
+		a.loadPreview(sel)
+	}
+
+	if a.previewedPath != first.Path {
+		t.Errorf("expected previewedPath %q, got %q", first.Path, a.previewedPath)
+	}
+
+	// Move to a different note
+	a.noteList.MoveDown()
+	for a.noteList.SelectedItem() == nil {
+		a.noteList.MoveDown()
+	}
+	second := a.noteList.SelectedItem()
+	if second.Path == first.Path {
+		t.Fatal("test setup: expected to land on a different note")
+	}
+
+	if sel := a.noteList.SelectedItem(); sel != nil && sel.Path != a.previewedPath {
+		a.loadPreview(sel)
+	}
+
+	if a.previewedPath != second.Path {
+		t.Errorf("expected previewedPath %q after navigate, got %q", second.Path, a.previewedPath)
+	}
+}
+
+func TestApp_AutoPreview_SkipsWhenHidden(t *testing.T) {
+	a := newTestApp()
+	// preview is hidden by default
+
+	for a.noteList.SelectedItem() == nil {
+		a.noteList.MoveDown()
+	}
+
+	// Auto-preview logic should NOT fire when preview is hidden
+	if a.preview.Visible() {
+		t.Fatal("expected preview to be hidden")
+	}
+
+	if a.previewedPath != "" {
+		t.Errorf("expected empty previewedPath when preview hidden, got %q", a.previewedPath)
+	}
+}
+
+func TestApp_AutoPreview_SkipsOnFolder(t *testing.T) {
+	a := newTestApp()
+	a.preview.Toggle()
+
+	// Cursor 0 should be a folder (folders sort first)
+	if !a.noteList.SelectedIsFolder() {
+		t.Skip("first item is not a folder in this layout")
+	}
+
+	// Auto-preview should not fire on a folder (SelectedItem returns nil)
+	if sel := a.noteList.SelectedItem(); sel != nil && sel.Path != a.previewedPath {
+		a.loadPreview(sel)
+	}
+
+	if a.previewedPath != "" {
+		t.Errorf("expected empty previewedPath on folder, got %q", a.previewedPath)
+	}
+}
+
 func TestApp_RenderFilterBar(t *testing.T) {
 	a := newTestApp()
 	a.filterMode = true
