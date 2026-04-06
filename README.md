@@ -99,7 +99,8 @@ This creates `ideas/my-first-note.md` and opens it in your editor. When you save
 | **Tab** | Switch focus between tree and preview |
 | **n** | Create a new note in the focused folder |
 | **d** | Delete selected note or folder (with confirmation) |
-| **:** or **/** | Open command bar |
+| **:** | Open command bar |
+| **/** | Search / filter notes |
 | **?** | Show help |
 | **Esc** | Close preview / help / command bar |
 | **q** | Close preview/help if open, otherwise quit |
