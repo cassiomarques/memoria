@@ -149,6 +149,15 @@ git_remote: ""
 
 # Editor command (leave empty to use $EDITOR, $VISUAL, or vim)
 editor: ""
+
+# Start with all folders expanded (default: true)
+expand_folders: true
+
+# Show the virtual "Pinned" section at the top of the tree (default: true)
+show_pinned_notes: true
+
+# Show modification timestamps next to notes (default: true, toggle with t)
+show_timestamps: true
 ```
 
 ### Editor resolution
