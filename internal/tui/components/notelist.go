@@ -127,8 +127,15 @@ func (n *NoteList) SetItems(items []NoteItem) {
 		selectedPath = sel.Path
 	}
 
+	// Remember which folders are collapsed so we can restore after rebuild
+	collapsedFolders := n.collectCollapsedFolders()
+
 	n.items = items
 	n.tree = buildTree(n.items, n.expandAll, n.showPinned, n.todoFolder)
+
+	// Restore collapsed state
+	n.applyCollapsedFolders(collapsedFolders)
+
 	n.flatVisible = nil
 	n.rebuildFlatVisible()
 	n.cursor = 0
@@ -623,6 +630,43 @@ func (n NoteList) renderNode(visibleIndex int) string {
 	// Root-level note
 	line := indicator + titleStyle.Render(displayTitle) + dueStyle.Render(dueSuffix) + timeStyle.Render(timeSuffix)
 	return lipgloss.NewStyle().Width(n.width).Render(line)
+}
+
+// collectCollapsedFolders returns the set of folder fullPaths that are currently collapsed.
+func (n *NoteList) collectCollapsedFolders() map[string]bool {
+	collapsed := make(map[string]bool)
+	var walk func(nodes []*treeNode)
+	walk = func(nodes []*treeNode) {
+		for _, node := range nodes {
+			if node.isFolder && !node.expanded {
+				collapsed[node.fullPath] = true
+			}
+			if node.isFolder {
+				walk(node.children)
+			}
+		}
+	}
+	walk(n.tree)
+	return collapsed
+}
+
+// applyCollapsedFolders collapses any folders whose fullPath is in the set.
+func (n *NoteList) applyCollapsedFolders(collapsed map[string]bool) {
+	if len(collapsed) == 0 {
+		return
+	}
+	var walk func(nodes []*treeNode)
+	walk = func(nodes []*treeNode) {
+		for _, node := range nodes {
+			if node.isFolder && collapsed[node.fullPath] {
+				node.expanded = false
+			}
+			if node.isFolder {
+				walk(node.children)
+			}
+		}
+	}
+	walk(n.tree)
 }
 
 // buildTree constructs a hierarchical tree from a flat list of NoteItems.

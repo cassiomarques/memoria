@@ -1602,3 +1602,28 @@ func TestPinnedFolderPath_ReturnsEmpty(t *testing.T) {
 		t.Errorf("expected empty path for virtual pinned folder, got %q", got)
 	}
 }
+
+func TestSetItems_PreservesCollapsedFolders(t *testing.T) {
+	nl := NewNoteList()
+	nl.SetSize(80, 40)
+	nl.SetItems(sampleItems())
+
+	// Cursor at 0 = Dotcom folder. Collapse it.
+	nl.CollapseSelected()
+
+	// Verify Dotcom is collapsed — visible count should decrease.
+	// Full expanded: 14 nodes. Collapsing Dotcom hides 2 notes = 12.
+	got := visibleNodeCount(&nl)
+	if got != 12 {
+		t.Fatalf("expected 12 visible after collapsing Dotcom, got %d", got)
+	}
+
+	// Now SetItems again (simulates refreshNoteList after bookmark toggle)
+	nl.SetItems(sampleItems())
+
+	// Dotcom should still be collapsed
+	got = visibleNodeCount(&nl)
+	if got != 12 {
+		t.Errorf("expected 12 visible after SetItems (collapsed preserved), got %d", got)
+	}
+}
