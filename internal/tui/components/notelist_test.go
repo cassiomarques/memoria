@@ -1512,3 +1512,73 @@ func TestNoteList_DoneTodoNoDueSuffix(t *testing.T) {
 		t.Error("done todo should not show due date suffix")
 	}
 }
+
+func TestPrepareCursorForDelete_StaysNearby(t *testing.T) {
+	nl := NewNoteList()
+	nl.SetSize(80, 40)
+	nl.SetItems(sampleItems())
+
+	// Move cursor to index 4 (third note: "backporting_deps" under Go)
+	// Tree: 0=Dotcom, 1=running_azure, 2=testing_monolith, 3=Go, 4=backporting_deps
+	for i := 0; i < 4; i++ {
+		nl, _ = nl.Update(simpleKeyPress('j'))
+	}
+	if nl.Cursor() != 4 {
+		t.Fatalf("expected cursor at 4, got %d", nl.Cursor())
+	}
+
+	// Simulate deleting the item at cursor 4 — remove backporting_deps
+	nl.PrepareCursorForDelete()
+	items := sampleItems()
+	var remaining []NoteItem
+	for _, item := range items {
+		if item.Path != "go/backporting_deps.md" {
+			remaining = append(remaining, item)
+		}
+	}
+	nl.SetItems(remaining)
+
+	// Cursor should be at 3 (the Go folder, one above the deleted item)
+	if nl.Cursor() != 3 {
+		t.Errorf("expected cursor at 3 after delete, got %d", nl.Cursor())
+	}
+}
+
+func TestPrepareCursorForDelete_FirstItem(t *testing.T) {
+	nl := NewNoteList()
+	nl.SetSize(80, 40)
+	nl.SetItems(sampleItems())
+
+	// Cursor at 0 (Dotcom folder). Deleting the first item should keep cursor at 0.
+	nl.PrepareCursorForDelete()
+	items := sampleItems()[1:] // remove first item
+	nl.SetItems(items)
+
+	if nl.Cursor() != 0 {
+		t.Errorf("expected cursor at 0 after deleting first item, got %d", nl.Cursor())
+	}
+}
+
+func TestPrepareCursorForDelete_LastItem(t *testing.T) {
+	nl := NewNoteList()
+	nl.SetSize(80, 40)
+	items := []NoteItem{
+		{Path: "a.md", Title: "A", Folder: "", Modified: time.Now()},
+		{Path: "b.md", Title: "B", Folder: "", Modified: time.Now()},
+	}
+	nl.SetItems(items)
+
+	// Move to last item (index 1)
+	nl, _ = nl.Update(simpleKeyPress('j'))
+	if nl.Cursor() != 1 {
+		t.Fatalf("expected cursor at 1, got %d", nl.Cursor())
+	}
+
+	// Delete last item — cursor should go to 0
+	nl.PrepareCursorForDelete()
+	nl.SetItems(items[:1])
+
+	if nl.Cursor() != 0 {
+		t.Errorf("expected cursor at 0 after deleting last of 2 items, got %d", nl.Cursor())
+	}
+}

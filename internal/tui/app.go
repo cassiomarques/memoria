@@ -13,6 +13,7 @@ import (
 	"charm.land/lipgloss/v2"
 	"github.com/cassiomarques/memoria/internal/note"
 	"github.com/cassiomarques/memoria/internal/service"
+	"github.com/cassiomarques/memoria/internal/storage"
 	"github.com/cassiomarques/memoria/internal/tui/components"
 	"github.com/cassiomarques/memoria/internal/tui/theme"
 )
@@ -561,6 +562,8 @@ func (a *App) confirmDelete() {
 		return
 	}
 
+	a.noteList.PrepareCursorForDelete()
+
 	if a.pendingDeleteIsFolder {
 		count, err := a.svc.DeleteFolder(a.pendingDeletePath)
 		if err != nil {
@@ -569,20 +572,26 @@ func (a *App) confirmDelete() {
 			a.setMessage(fmt.Sprintf("Deleted folder '%s' (%d notes)", a.pendingDeletePath, count), false)
 		}
 	} else {
-		err := a.svc.Delete(a.pendingDeletePath)
-		if err != nil {
-			a.setMessage("Delete failed: "+err.Error(), true)
-		} else {
-			a.setMessage(fmt.Sprintf("Deleted: %s", a.pendingDeletePath), false)
-		}
-		// Clear preview if we deleted the previewed note
-		if a.previewedPath == a.pendingDeletePath {
-			a.preview.SetContent("", "")
-			a.previewedPath = ""
-		}
+		a.deleteNote(a.pendingDeletePath)
 	}
 	_ = a.refreshNoteList()
 	a.refreshTags()
+}
+
+// deleteNote deletes a single note and clears the preview if it was showing
+// that note. Caller is responsible for refreshNoteList/refreshTags.
+func (a *App) deleteNote(path string) bool {
+	err := a.svc.Delete(path)
+	if err != nil {
+		a.setMessage("Delete failed: "+err.Error(), true)
+		return false
+	}
+	a.setMessage(fmt.Sprintf("Deleted: %s", path), false)
+	if a.previewedPath == path {
+		a.preview.SetContent("", "")
+		a.previewedPath = ""
+	}
+	return true
 }
 
 // togglePin pins or unpins the currently selected note.
@@ -870,7 +879,7 @@ func (a *App) executeCommand(cmd *Command) tea.Cmd {
 	case "todo":
 		return a.cmdTodo(cmd.Args)
 	case "todos":
-		return a.cmdTodos()
+		return a.cmdTodos(strings.Join(cmd.Args, " "))
 	case "sync":
 		return a.cmdSync()
 	case "remote":
@@ -1237,14 +1246,11 @@ func (a *App) cmdRm(args []string) tea.Cmd {
 		return nil
 	}
 
-	err := a.svc.Delete(args[0])
-	if err != nil {
-		a.setMessage("Delete failed: "+err.Error(), true)
-		return nil
+	a.noteList.PrepareCursorForDelete()
+	if a.deleteNote(args[0]) {
+		_ = a.refreshNoteList()
+		a.refreshTags()
 	}
-
-	_ = a.refreshNoteList()
-	a.setMessage(fmt.Sprintf("Deleted: %s", args[0]), false)
 	return nil
 }
 
@@ -1282,7 +1288,15 @@ func (a *App) cmdTags() tea.Cmd {
 	return nil
 }
 
-func (a *App) cmdTodos() tea.Cmd {
+func (a *App) cmdTodos(args string) tea.Cmd {
+	// Parse optional filter: overdue, today, pending, done
+	filter := strings.TrimSpace(strings.ToLower(args))
+	validFilters := map[string]bool{"": true, "overdue": true, "today": true, "pending": true, "done": true}
+	if !validFilters[filter] {
+		a.setMessage("Unknown filter: "+filter+" (use overdue, today, pending, done)", true)
+		return nil
+	}
+
 	if a.svc == nil {
 		a.setMessage("No service configured", true)
 		return nil
@@ -1294,16 +1308,67 @@ func (a *App) cmdTodos() tea.Cmd {
 		return nil
 	}
 
-	if len(todos) == 0 {
-		a.setMessage("No todos found", false)
+	now := time.Now()
+	y1, m1, d1 := now.Date()
+	today := time.Date(y1, m1, d1, 0, 0, 0, 0, time.Local)
+
+	// Helper closures for classification
+	isOverdue := func(t *storage.NoteMeta) bool {
+		return !t.Done && t.Due != nil && time.Date(t.Due.Year(), t.Due.Month(), t.Due.Day(), 0, 0, 0, 0, time.Local).Before(today)
+	}
+	isDueToday := func(t *storage.NoteMeta) bool {
+		if t.Done || t.Due == nil {
+			return false
+		}
+		y2, m2, d2 := t.Due.Date()
+		return y1 == y2 && m1 == m2 && d1 == d2
+	}
+
+	// Apply filter
+	var filtered []*storage.NoteMeta
+	for _, t := range todos {
+		switch filter {
+		case "overdue":
+			if isOverdue(t) {
+				filtered = append(filtered, t)
+			}
+		case "today":
+			if isDueToday(t) {
+				filtered = append(filtered, t)
+			}
+		case "pending":
+			if !t.Done {
+				filtered = append(filtered, t)
+			}
+		case "done":
+			if t.Done {
+				filtered = append(filtered, t)
+			}
+		default:
+			filtered = append(filtered, t)
+		}
+	}
+
+	if len(filtered) == 0 {
+		label := "todos"
+		if filter != "" {
+			label = filter + " todos"
+		}
+		a.setMessage("No "+label+" found", false)
 		return nil
 	}
 
+	// Build preview
+	title := "Todos"
+	if filter != "" {
+		title = strings.ToUpper(filter[:1]) + filter[1:] + " Todos"
+	}
+
 	var lines []string
-	lines = append(lines, "# Todos\n")
+	lines = append(lines, "# "+title+"\n")
 
 	var pending, done int
-	for _, t := range todos {
+	for _, t := range filtered {
 		icon := "⭕"
 		if t.Done {
 			icon = "✅"
@@ -1315,13 +1380,9 @@ func (a *App) cmdTodos() tea.Cmd {
 		if t.Due != nil {
 			dueStr = " — due " + t.Due.Format(time.DateOnly)
 			if !t.Done {
-				y1, m1, d1 := time.Now().Date()
-				y2, m2, d2 := t.Due.Date()
-				today := time.Date(y1, m1, d1, 0, 0, 0, 0, time.Local)
-				dueDate := time.Date(y2, m2, d2, 0, 0, 0, 0, time.Local)
-				if dueDate.Before(today) {
+				if isOverdue(t) {
 					dueStr += " ⚠️ **OVERDUE**"
-				} else if y1 == y2 && m1 == m2 && d1 == d2 {
+				} else if isDueToday(t) {
 					dueStr += " ⏰ **TODAY**"
 				}
 			}
@@ -1330,12 +1391,12 @@ func (a *App) cmdTodos() tea.Cmd {
 		if len(t.Tags) > 0 {
 			tagStr = " `" + strings.Join(t.Tags, "` `") + "`"
 		}
-		title := strings.TrimSuffix(t.Title, ".md")
-		lines = append(lines, fmt.Sprintf("- %s **%s**%s%s", icon, title, dueStr, tagStr))
+		noteTitle := strings.TrimSuffix(t.Title, ".md")
+		lines = append(lines, fmt.Sprintf("- %s **%s**%s%s", icon, noteTitle, dueStr, tagStr))
 	}
 
 	lines = append(lines, fmt.Sprintf("\n*%d pending, %d done*", pending, done))
-	a.preview.SetContent("Todos", strings.Join(lines, "\n"))
+	a.preview.SetContent(title, strings.Join(lines, "\n"))
 	a.previewedPath = ""
 	a.customPreview = true
 	if !a.preview.Visible() {
@@ -1343,7 +1404,7 @@ func (a *App) cmdTodos() tea.Cmd {
 		a.resizeComponents()
 	}
 
-	a.setMessage(fmt.Sprintf("%d todos (%d pending)", len(todos), pending), false)
+	a.setMessage(fmt.Sprintf("%d %s (%d pending)", len(filtered), strings.ToLower(title), pending), false)
 	return nil
 }
 

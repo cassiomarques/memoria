@@ -86,6 +86,8 @@ func Completions(input string, noteItems []components.NoteItem, tagList []string
 		return completeFolders(argPart, noteItems)
 	case "todo":
 		return completeTodoCommand(argPart, noteItems)
+	case "todos":
+		return completeTodosFilter(argPart)
 	default:
 		return nil
 	}
@@ -293,4 +295,20 @@ func completeTodoCommand(argPart string, noteItems []components.NoteItem) []stri
 		return completeFolders("", noteItems)
 	}
 	return nil
+}
+
+// completeTodosFilter suggests filter keywords for the :todos command.
+func completeTodosFilter(prefix string) []string {
+	filters := []string{"overdue", "today", "pending", "done"}
+	prefix = strings.ToLower(strings.TrimSpace(prefix))
+	if prefix == "" {
+		return filters
+	}
+	var matches []string
+	for _, f := range filters {
+		if strings.HasPrefix(f, prefix) {
+			matches = append(matches, f)
+		}
+	}
+	return matches
 }

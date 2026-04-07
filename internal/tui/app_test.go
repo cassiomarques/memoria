@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/cassiomarques/memoria/internal/tui/components"
@@ -639,5 +640,57 @@ func TestCmdTodo_OnlyTagsNoTitleShowsError(t *testing.T) {
 	msg := a.statusBar.Message()
 	if msg == "" {
 		t.Error("expected error message when title is empty")
+	}
+}
+
+func TestParseCommand_TodosWithFilter(t *testing.T) {
+	tests := []struct {
+		input    string
+		wantArgs []string
+	}{
+		{"todos overdue", []string{"overdue"}},
+		{"todos today", []string{"today"}},
+		{"todos pending", []string{"pending"}},
+		{"todos done", []string{"done"}},
+	}
+	for _, tt := range tests {
+		cmd, err := ParseCommand(tt.input)
+		if err != nil {
+			t.Fatalf("ParseCommand(%q) unexpected error: %v", tt.input, err)
+		}
+		if cmd.Name != "todos" {
+			t.Errorf("ParseCommand(%q) name = %q, want 'todos'", tt.input, cmd.Name)
+		}
+		if len(cmd.Args) != len(tt.wantArgs) {
+			t.Errorf("ParseCommand(%q) args len = %d, want %d", tt.input, len(cmd.Args), len(tt.wantArgs))
+			continue
+		}
+		for i, arg := range cmd.Args {
+			if arg != tt.wantArgs[i] {
+				t.Errorf("ParseCommand(%q) args[%d] = %q, want %q", tt.input, i, arg, tt.wantArgs[i])
+			}
+		}
+	}
+}
+
+func TestCmdTodos_InvalidFilter(t *testing.T) {
+	a := newTestApp()
+	a.cmdTodos("bogus")
+	msg := a.statusBar.Message()
+	if msg == "" {
+		t.Error("expected error message for invalid filter")
+	}
+	if !strings.Contains(msg, "Unknown filter") {
+		t.Errorf("expected 'Unknown filter' in message, got %q", msg)
+	}
+}
+
+func TestCmdTodos_NoService(t *testing.T) {
+	a := newTestApp()
+	a.svc = nil
+	a.cmdTodos("overdue")
+	msg := a.statusBar.Message()
+	if msg == "" {
+		t.Error("expected error message when no service")
 	}
 }

@@ -64,6 +64,10 @@ type NoteList struct {
 	todoFolder   string // folder name that sorts to top (e.g. "TODO")
 	filterText   string
 
+	// fallbackCursor is used when the selected item no longer exists after
+	// SetItems (e.g. after a delete). -1 means not set.
+	fallbackCursor int
+
 	// gg detection: true after first 'g' press
 	pendingG bool
 }
@@ -71,9 +75,10 @@ type NoteList struct {
 // NewNoteList creates a NoteList with default styles.
 func NewNoteList() NoteList {
 	return NoteList{
-		styles:     theme.DefaultStyles(),
-		expandAll:  true, // default: all folders expanded
-		showPinned: true, // default: show pinned section
+		styles:         theme.DefaultStyles(),
+		expandAll:      true, // default: all folders expanded
+		showPinned:     true, // default: show pinned section
+		fallbackCursor: -1,
 	}
 }
 
@@ -103,6 +108,17 @@ func (n *NoteList) SetTodoFolder(folder string) {
 	n.todoFolder = folder
 }
 
+// PrepareCursorForDelete records the current cursor position so that after the
+// next SetItems call (which rebuilds the tree), the cursor lands on the item
+// above the deleted one rather than jumping to the top.
+func (n *NoteList) PrepareCursorForDelete() {
+	pos := n.cursor - 1
+	if pos < 0 {
+		pos = 0
+	}
+	n.fallbackCursor = pos
+}
+
 func (n *NoteList) SetItems(items []NoteItem) {
 	// Remember current selection to restore after rebuild
 	var selectedPath string
@@ -118,15 +134,30 @@ func (n *NoteList) SetItems(items []NoteItem) {
 	n.offset = 0
 
 	// Restore cursor to previously selected note
+	restored := false
 	if selectedPath != "" {
 		for i, node := range n.flatVisible {
 			if !node.isFolder && node.noteItem != nil && node.noteItem.Path == selectedPath {
 				n.cursor = i
 				n.ensureVisible()
+				restored = true
 				break
 			}
 		}
 	}
+
+	// If path-based restore failed (e.g. item was deleted), use fallback
+	if !restored && n.fallbackCursor >= 0 {
+		n.cursor = n.fallbackCursor
+		if n.cursor >= len(n.flatVisible) {
+			n.cursor = len(n.flatVisible) - 1
+		}
+		if n.cursor < 0 {
+			n.cursor = 0
+		}
+		n.ensureVisible()
+	}
+	n.fallbackCursor = -1
 }
 
 func (n *NoteList) SetSize(width, height int) {
