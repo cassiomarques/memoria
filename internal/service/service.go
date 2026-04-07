@@ -88,7 +88,7 @@ func (s *NoteService) gitWorker() {
 			if s.repo == nil {
 				continue
 			}
-			if err := s.repo.CommitAll(msg); err != nil {
+			if err := s.safeCommit(msg); err != nil {
 				s.syncResults <- fmt.Errorf("git commit: %w", err)
 				continue
 			}
@@ -110,13 +110,25 @@ func (s *NoteService) gitWorker() {
 	}
 }
 
+// safeCommit wraps CommitAll with panic recovery. go-git is not fully
+// thread-safe and can occasionally panic when the working tree changes
+// during a commit. We recover instead of crashing the worker goroutine.
+func (s *NoteService) safeCommit(msg string) (err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			err = fmt.Errorf("git panic (recovered): %v", r)
+		}
+	}()
+	return s.repo.CommitAll(msg)
+}
+
 // drainCommits processes any remaining commit requests in the buffer.
 func (s *NoteService) drainCommits() {
 	for {
 		select {
 		case msg := <-s.commitReqs:
 			if s.repo != nil {
-				_ = s.repo.CommitAll(msg)
+				_ = s.safeCommit(msg)
 			}
 		default:
 			return
