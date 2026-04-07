@@ -1582,3 +1582,23 @@ func TestPrepareCursorForDelete_LastItem(t *testing.T) {
 		t.Errorf("expected cursor at 0 after deleting last of 2 items, got %d", nl.Cursor())
 	}
 }
+
+func TestPinnedFolderPath_ReturnsEmpty(t *testing.T) {
+	nl := NewNoteList()
+	nl.SetSize(80, 40)
+	items := []NoteItem{
+		{Path: "a.md", Title: "A", Folder: "", Modified: time.Now(), Pinned: true},
+		{Path: "b.md", Title: "B", Folder: "", Modified: time.Now()},
+	}
+	nl.SetItems(items)
+
+	// Cursor starts at 0 which is the virtual "📌 Pinned" folder
+	if !nl.SelectedIsFolder() {
+		t.Fatal("expected cursor on folder (Pinned)")
+	}
+
+	// SelectedFolderPath must return "" for the virtual pinned folder
+	if got := nl.SelectedFolderPath(); got != "" {
+		t.Errorf("expected empty path for virtual pinned folder, got %q", got)
+	}
+}

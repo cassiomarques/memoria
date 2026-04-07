@@ -30,6 +30,7 @@ type treeNode struct {
 	name        string
 	fullPath    string // full folder path for folders (e.g., "Projects/CodeCoverage")
 	isFolder    bool
+	virtual     bool // true for synthetic folders like "📌 Pinned" that have no filesystem path
 	expanded    bool
 	depth       int
 	noteItem    *NoteItem
@@ -190,12 +191,13 @@ func (n NoteList) SelectedIsFolder() bool {
 }
 
 // SelectedFolderPath returns the full path of the selected folder, or "" if not a folder.
+// Returns "" for virtual folders (e.g. "📌 Pinned") that don't map to real paths.
 func (n NoteList) SelectedFolderPath() string {
 	if len(n.flatVisible) == 0 || n.cursor >= len(n.flatVisible) {
 		return ""
 	}
 	node := n.flatVisible[n.cursor]
-	if !node.isFolder {
+	if !node.isFolder || node.virtual {
 		return ""
 	}
 	return node.fullPath
@@ -695,6 +697,7 @@ func buildTree(items []NoteItem, expandAll bool, showPinned bool, todoFolder str
 				name:     "📌 Pinned",
 				fullPath: "__pinned__",
 				isFolder: true,
+				virtual:  true,
 				expanded: true,
 				depth:    0,
 				children: make([]*treeNode, 0, len(pinnedNodes)),
