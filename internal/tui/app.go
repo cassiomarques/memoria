@@ -39,6 +39,9 @@ type commandResultMsg struct {
 // clearMessageMsg signals that the status bar message should be cleared.
 type clearMessageMsg struct{}
 
+// refreshTickMsg triggers a periodic re-render so relative timestamps stay fresh.
+type refreshTickMsg struct{}
+
 // App is the root Bubble Tea model that composes all TUI components.
 type App struct {
 	noteList   components.NoteList
@@ -123,7 +126,7 @@ func NewAppWithService(svc *service.NoteService, opts AppOptions) App {
 	return a
 }
 
-func (a App) Init() tea.Cmd { return nil }
+func (a App) Init() tea.Cmd { return refreshTickCmd() }
 
 func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmds []tea.Cmd
@@ -163,6 +166,11 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case clearMessageMsg:
 		a.statusBar.ClearMessage()
 		return a, nil
+
+	case refreshTickMsg:
+		// No state change needed — returning triggers View() which recalculates
+		// relative timestamps. Schedule the next tick.
+		return a, refreshTickCmd()
 
 	case tea.KeyPressMsg:
 		key := msg.String()
@@ -609,6 +617,13 @@ func (a *App) setMessage(msg string, isError bool) {
 func clearMessageCmd() tea.Cmd {
 	return tea.Tick(3*time.Second, func(t time.Time) tea.Msg {
 		return clearMessageMsg{}
+	})
+}
+
+// refreshTickCmd returns a command that triggers a re-render after one minute.
+func refreshTickCmd() tea.Cmd {
+	return tea.Tick(time.Minute, func(t time.Time) tea.Msg {
+		return refreshTickMsg{}
 	})
 }
 
