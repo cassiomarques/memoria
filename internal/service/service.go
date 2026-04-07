@@ -136,6 +136,12 @@ func (s *NoteService) AfterEdit(path string) (bool, error) {
 		return false, fmt.Errorf("reloading note: %w", err)
 	}
 
+	// Re-save to update the frontmatter's "modified" timestamp.
+	// Save() sets n.Modified = time.Now() before writing.
+	if err := s.files.Save(n); err != nil {
+		return false, fmt.Errorf("saving updated timestamp: %w", err)
+	}
+
 	if err := s.meta.UpsertNote(n); err != nil {
 		return false, fmt.Errorf("upserting metadata: %w", err)
 	}

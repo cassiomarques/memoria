@@ -170,6 +170,60 @@ func TestAfterEdit(t *testing.T) {
 	}
 }
 
+func TestAfterEdit_UpdatesModifiedTimestamp(t *testing.T) {
+	svc := setupService(t)
+
+	n, err := svc.Create("timestamped.md", "Initial content", nil)
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+
+	// Write the file with a backdated modified timestamp to make the
+	// comparison unambiguous (frontmatter uses second-level precision).
+	absPath := svc.files.AbsPath("timestamped.md")
+	backdated := time.Date(2020, 1, 1, 0, 0, 0, 0, time.UTC)
+	edited := "---\ncreated: " + n.Created.Format(time.RFC3339) +
+		"\nmodified: " + backdated.Format(time.RFC3339) +
+		"\n---\nEdited content"
+	if err := os.WriteFile(absPath, []byte(edited), 0o644); err != nil {
+		t.Fatalf("writing edited content: %v", err)
+	}
+
+	_, err = svc.AfterEdit("timestamped.md")
+	if err != nil {
+		t.Fatalf("AfterEdit: %v", err)
+	}
+
+	// Verify Modified was updated in the reloaded note
+	got, err := svc.Get("timestamped.md")
+	if err != nil {
+		t.Fatalf("Get: %v", err)
+	}
+	if !got.Modified.After(backdated) {
+		t.Errorf("expected Modified to advance past backdated time: backdated=%v, got=%v",
+			backdated, got.Modified)
+	}
+
+	// Verify the frontmatter on disk was updated too
+	raw, err := os.ReadFile(absPath)
+	if err != nil {
+		t.Fatalf("reading file: %v", err)
+	}
+	if strings.Contains(string(raw), backdated.Format(time.RFC3339)) {
+		t.Error("expected frontmatter on disk to have a newer modified timestamp")
+	}
+
+	// Verify SQLite metadata matches
+	nm, err := svc.meta.GetNote("timestamped.md")
+	if err != nil {
+		t.Fatalf("GetNote: %v", err)
+	}
+	if !nm.Modified.After(backdated) {
+		t.Errorf("expected metadata Modified to advance: backdated=%v, got=%v",
+			backdated, nm.Modified)
+	}
+}
+
 func TestDelete(t *testing.T) {
 	svc := setupService(t)
 
