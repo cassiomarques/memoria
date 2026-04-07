@@ -465,3 +465,19 @@ func TestResolveTodosEnabled(t *testing.T) {
 		t.Error("ResolveTodosEnabled() should be true when set to true")
 	}
 }
+
+func TestResolveTheme(t *testing.T) {
+	cfg := DefaultConfig()
+
+	// Default is "dark"
+	if got := cfg.ResolveTheme(); got != "dark" {
+		t.Errorf("ResolveTheme() default = %q, want 'dark'", got)
+	}
+
+	// Set to "light"
+	light := "light"
+	cfg.Theme = &light
+	if got := cfg.ResolveTheme(); got != "light" {
+		t.Errorf("ResolveTheme() = %q, want 'light'", got)
+	}
+}

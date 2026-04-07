@@ -17,6 +17,7 @@ type Config struct {
 	NotesDir          string  `yaml:"notes_dir"`
 	GitRemote         string  `yaml:"git_remote,omitempty"`
 	Editor            string  `yaml:"editor,omitempty"`
+	Theme             *string `yaml:"theme,omitempty"`
 	ExpandFolders     *bool   `yaml:"expand_folders,omitempty"`
 	ShowPinnedNotes   *bool   `yaml:"show_pinned_notes,omitempty"`
 	ShowTimestamps    *bool   `yaml:"show_timestamps,omitempty"`
@@ -111,6 +112,15 @@ func (c *Config) ResolveTodosEnabled() bool {
 		return true
 	}
 	return *c.TodosEnabled
+}
+
+// ResolveTheme returns the theme mode ("dark" or "light").
+// Defaults to "dark" if not set.
+func (c *Config) ResolveTheme() string {
+	if c.Theme == nil {
+		return "dark"
+	}
+	return *c.Theme
 }
 
 // ResolveEditor returns the editor to use, checking in order:

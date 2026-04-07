@@ -22,7 +22,7 @@ type CommandBar struct {
 	customLabel   string // overrides "CMD" badge when non-empty
 }
 
-// NewCommandBar creates a CommandBar styled with Catppuccin Mocha colors.
+// NewCommandBar creates a CommandBar styled with the active theme colors.
 func NewCommandBar() CommandBar {
 	ti := textinput.New()
 	ti.Placeholder = "type a command..."
@@ -31,7 +31,12 @@ func NewCommandBar() CommandBar {
 
 	s := theme.DefaultStyles()
 
-	tiStyles := textinput.DefaultDarkStyles()
+	var tiStyles textinput.Styles
+	if theme.IsLight() {
+		tiStyles = textinput.DefaultLightStyles()
+	} else {
+		tiStyles = textinput.DefaultDarkStyles()
+	}
 	tiStyles.Focused.Text = lipgloss.NewStyle().Foreground(theme.ColorText)
 	tiStyles.Focused.Placeholder = lipgloss.NewStyle().Foreground(theme.ColorOverlay0)
 	tiStyles.Focused.Prompt = lipgloss.NewStyle().Foreground(theme.ColorMauve).Bold(true)

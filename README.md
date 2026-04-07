@@ -17,7 +17,7 @@ Memoria keeps your notes as plain Markdown files organized in folders, indexes t
 - **Folder hierarchy** — Organize notes in nested folders. Collapsible tree view in the TUI.
 - **Tagging** — Add and remove tags at any time. Search and filter by tag.
 - **Your editor** — Opens `$EDITOR` (or vim) for editing. Memoria handles the rest.
-- **Beautiful TUI** — Catppuccin Mocha theme, markdown preview, vim-style navigation.
+- **Beautiful TUI** — Catppuccin theme (dark/light), markdown preview, vim-style navigation.
 - **Single binary** — Pure Go, no CGO, no external dependencies.
 
 ## Installation
@@ -167,6 +167,9 @@ git_remote: ""
 # Editor command (leave empty to use $EDITOR, $VISUAL, or vim)
 editor: ""
 
+# Color theme: "dark" (Catppuccin Mocha) or "light" (Catppuccin Latte)
+theme: dark
+
 # Start with all folders expanded (default: true)
 expand_folders: true
 
@@ -193,6 +196,23 @@ Memoria picks your editor in this order:
 4. `vim` (fallback)
 
 Multi-word commands work too (e.g., `editor: emacs -nw`).
+
+### Theme
+
+Memoria ships with two themes based on the [Catppuccin](https://github.com/catppuccin/catppuccin) palette:
+
+| Value | Palette | Best for |
+|-------|---------|----------|
+| `dark` (default) | Catppuccin Mocha | Dark terminal backgrounds |
+| `light` | Catppuccin Latte | Light terminal backgrounds |
+
+Set it in `~/.memoria/config.yaml`:
+
+```yaml
+theme: light
+```
+
+Restart memoria after changing the theme.
 
 ## How notes are stored
 
@@ -267,7 +287,7 @@ All three stay in sync automatically. The Markdown files are what gets committed
 - [Bleve v2](https://github.com/blevesearch/bleve) — Full-text search engine
 - [go-git v5](https://github.com/go-git/go-git) — Pure Go git implementation
 - [modernc.org/sqlite](https://pkg.go.dev/modernc.org/sqlite) — Pure Go SQLite
-- [Catppuccin Mocha](https://github.com/catppuccin/catppuccin) — Color scheme
+- [Catppuccin](https://github.com/catppuccin/catppuccin) — Mocha (dark) & Latte (light) color schemes
 
 Everything is pure Go — no CGO, no system dependencies.
 

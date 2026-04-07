@@ -13,6 +13,7 @@ import (
 	"github.com/cassiomarques/memoria/internal/service"
 	"github.com/cassiomarques/memoria/internal/storage"
 	"github.com/cassiomarques/memoria/internal/tui"
+	"github.com/cassiomarques/memoria/internal/tui/theme"
 )
 
 var version = "dev"
@@ -55,6 +56,9 @@ func run(homeDir string) error {
 	if err != nil {
 		return fmt.Errorf("loading config: %w", err)
 	}
+
+	// Initialize theme before building any TUI components
+	theme.Init(cfg.ResolveTheme())
 
 	// Ensure directories exist
 	if err := config.EnsureDirs(cfg); err != nil {

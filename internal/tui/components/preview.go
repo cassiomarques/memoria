@@ -58,7 +58,7 @@ func (p *Preview) renderContent() {
 	}
 
 	renderer, err := glamour.NewTermRenderer(
-		glamour.WithStandardStyle("dark"),
+		glamour.WithStandardStyle(theme.GlamourStyle()),
 		glamour.WithWordWrap(renderWidth),
 	)
 	if err != nil {
