@@ -24,6 +24,15 @@ const (
 	focusPreview
 )
 
+// filterState tracks the current phase of the fuzzy filter workflow.
+type filterState int
+
+const (
+	filterOff      filterState = iota // no filter active
+	filterTyping                      // user is typing a filter query
+	filterBrowsing                    // filtered results with normal keybindings
+)
+
 // editorFinishedMsg is sent when an external editor process completes.
 type editorFinishedMsg struct {
 	path string
@@ -74,9 +83,9 @@ type App struct {
 	pendingCreate       bool
 	pendingCreateFolder string // target folder path
 
-	// Fuzzy filter mode (/ key)
-	filterMode bool
-	filterBuf  string // current filter text
+	// Fuzzy filter state (/ key)
+	filterState filterState
+	filterBuf   string // current filter text
 
 	version string
 }
@@ -165,6 +174,10 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case clearMessageMsg:
 		a.statusBar.ClearMessage()
+		// Restore persistent filter indicator if still filtering
+		if a.filterState != filterOff {
+			a.updateFilterStatus()
+		}
 		return a, nil
 
 	case refreshTickMsg:
@@ -188,9 +201,30 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return a, clearMessageCmd()
 		}
 
-		// Fuzzy filter mode — intercept all keys
-		if a.filterMode {
+		// Fuzzy filter typing mode — intercept all keys
+		if a.filterState == filterTyping {
 			return a.handleFilterKey(key)
+		}
+
+		// Fuzzy filter browsing mode — Esc closes preview first, then clears filter
+		if a.filterState == filterBrowsing {
+			switch key {
+			case "esc":
+				if a.preview.Visible() {
+					a.preview.Toggle()
+					a.previewedPath = ""
+					a.focusedPane = focusList
+					a.resizeComponents()
+					a.updateFocusStyles()
+					return a, nil
+				}
+				a.clearFilter()
+				return a, nil
+			case "/":
+				a.filterState = filterTyping
+				return a, nil
+			}
+			// All other keys fall through to normal handling below
 		}
 
 		// Global quit keys (only when command bar is not active)
@@ -226,8 +260,9 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				cmds = append(cmds, cmd)
 				return a, tea.Batch(cmds...)
 			case "/":
-				a.filterMode = true
+				a.filterState = filterTyping
 				a.filterBuf = ""
+				a.focusedPane = focusList
 				a.noteList.SetFilter("")
 				a.setMessage("🔍 Type to filter (Esc to cancel)", false)
 				return a, nil
@@ -682,6 +717,11 @@ func (a *App) refreshNoteList() error {
 	a.noteList.SetItems(items)
 	a.statusBar.SetFolder(a.currentFolder)
 	a.statusBar.SetNoteCount(len(items))
+
+	// Reapply filter if browsing filtered results
+	if a.filterState == filterBrowsing && a.filterBuf != "" {
+		a.applyFilter()
+	}
 
 	return nil
 }
@@ -1242,28 +1282,22 @@ func (a *App) openInEditor(notePath string, lineNum int) tea.Cmd {
 	})
 }
 
-// handleFilterKey processes key events while in fuzzy filter mode.
+// handleFilterKey processes key events while in fuzzy filter typing mode.
 // All printable keys go to the filter input; only arrows navigate results.
 func (a App) handleFilterKey(key string) (tea.Model, tea.Cmd) {
 	switch key {
 	case "esc":
-		a.filterMode = false
-		a.filterBuf = ""
-		a.noteList.ClearFilter()
-		_ = a.refreshNoteList()
-		a.statusBar.ClearMessage()
+		a.clearFilter()
 		return a, nil
 	case "enter":
-		sel := a.noteList.SelectedItem()
-		a.filterMode = false
-		a.filterBuf = ""
-		a.noteList.ClearFilter()
-		_ = a.refreshNoteList()
-		a.statusBar.ClearMessage()
-		if sel != nil && a.svc != nil {
-			cmd := a.openInEditor(sel.Path, 0)
-			return a, cmd
+		// Transition to browsing mode if there's an active query with results.
+		// Empty query or zero results → exit filter.
+		if a.filterBuf == "" || a.noteList.FilteredCount() == 0 {
+			a.clearFilter()
+			return a, nil
 		}
+		a.filterState = filterBrowsing
+		a.updateFilterStatus()
 		return a, nil
 	case "ctrl+c":
 		return a, tea.Quit
@@ -1349,6 +1383,15 @@ func (a *App) applyFilter() {
 	a.updateFilterStatus()
 }
 
+// clearFilter resets filter state to off and restores the full note list.
+func (a *App) clearFilter() {
+	a.filterState = filterOff
+	a.filterBuf = ""
+	a.noteList.ClearFilter()
+	_ = a.refreshNoteList()
+	a.statusBar.ClearMessage()
+}
+
 func (a *App) updateFilterStatus() {
 	if a.filterBuf == "" {
 		a.statusBar.ClearMessage()
@@ -1357,7 +1400,8 @@ func (a *App) updateFilterStatus() {
 	filtered := a.noteList.FilteredCount()
 	total := len(a.noteList.AllItems())
 	msg := fmt.Sprintf("🔍 /%s  (%d/%d notes)", a.filterBuf, filtered, total)
-	a.setMessage(msg, false)
+	// Set status bar directly — filter status should not auto-clear.
+	a.statusBar.SetMessage(msg, a.styles.SuccessMessage)
 }
 
 func (a *App) folderDisplay() string {
@@ -1474,7 +1518,7 @@ func (a App) View() tea.View {
 
 	// Show filter bar or command bar
 	var barView string
-	if a.filterMode {
+	if a.filterState == filterTyping {
 		barView = a.renderFilterBar()
 	} else {
 		barView = a.commandBar.View()

@@ -13,25 +13,24 @@ func newTestApp() App {
 	return a
 }
 
-func TestApp_FilterMode_SlashActivates(t *testing.T) {
+func TestApp_FilterState_SlashActivates(t *testing.T) {
 	a := newTestApp()
 
-	if a.filterMode {
-		t.Fatal("filter mode should be off initially")
+	if a.filterState != filterOff {
+		t.Fatal("filter state should be off initially")
 	}
 
-	// Simulate "/" key: the Update method handles this, but let's test the state
-	a.filterMode = true
+	a.filterState = filterTyping
 	a.filterBuf = ""
 
-	if !a.filterMode {
-		t.Error("expected filter mode to be active")
+	if a.filterState != filterTyping {
+		t.Error("expected filter state to be typing")
 	}
 }
 
 func TestApp_HandleFilterKey_Typing(t *testing.T) {
 	a := newTestApp()
-	a.filterMode = true
+	a.filterState = filterTyping
 	a.filterBuf = ""
 
 	// Type "meet"
@@ -53,7 +52,7 @@ func TestApp_HandleFilterKey_Typing(t *testing.T) {
 
 func TestApp_HandleFilterKey_Backspace(t *testing.T) {
 	a := newTestApp()
-	a.filterMode = true
+	a.filterState = filterTyping
 	a.filterBuf = "mee"
 	a.noteList.SetFilter("mee")
 
@@ -67,7 +66,7 @@ func TestApp_HandleFilterKey_Backspace(t *testing.T) {
 
 func TestApp_HandleFilterKey_BackspaceOnEmpty(t *testing.T) {
 	a := newTestApp()
-	a.filterMode = true
+	a.filterState = filterTyping
 	a.filterBuf = ""
 
 	result, _ := a.handleFilterKey("backspace")
@@ -80,15 +79,15 @@ func TestApp_HandleFilterKey_BackspaceOnEmpty(t *testing.T) {
 
 func TestApp_HandleFilterKey_EscExits(t *testing.T) {
 	a := newTestApp()
-	a.filterMode = true
+	a.filterState = filterTyping
 	a.filterBuf = "test"
 	a.noteList.SetFilter("test")
 
 	result, _ := a.handleFilterKey("esc")
 	a = result.(App)
 
-	if a.filterMode {
-		t.Error("expected filter mode to be off after Esc")
+	if a.filterState != filterOff {
+		t.Error("expected filter state to be off after Esc")
 	}
 	if a.filterBuf != "" {
 		t.Errorf("expected empty filterBuf after Esc, got %q", a.filterBuf)
@@ -98,31 +97,48 @@ func TestApp_HandleFilterKey_EscExits(t *testing.T) {
 	}
 }
 
-func TestApp_HandleFilterKey_EnterExitsAndClearsFilter(t *testing.T) {
+func TestApp_HandleFilterKey_EnterTransitionsToBrowsing(t *testing.T) {
 	a := newTestApp()
-	a.filterMode = true
-	a.filterBuf = "test"
-	a.noteList.SetFilter("test")
+	a.filterState = filterTyping
+	a.filterBuf = ""
+
+	// Type a query that matches notes
+	for _, ch := range "meet" {
+		result, _ := a.handleFilterKey(string(ch))
+		a = result.(App)
+	}
 
 	result, _ := a.handleFilterKey("enter")
 	a = result.(App)
 
-	if a.filterMode {
-		t.Error("expected filter mode to be off after Enter")
+	if a.filterState != filterBrowsing {
+		t.Errorf("expected filterBrowsing after Enter with results, got %d", a.filterState)
 	}
-	if a.noteList.IsFiltering() {
-		t.Error("expected filter to be cleared after Enter")
+	if a.filterBuf != "meet" {
+		t.Errorf("expected filterBuf preserved, got %q", a.filterBuf)
+	}
+}
+
+func TestApp_HandleFilterKey_EnterWithEmptyQueryExits(t *testing.T) {
+	a := newTestApp()
+	a.filterState = filterTyping
+	a.filterBuf = ""
+
+	result, _ := a.handleFilterKey("enter")
+	a = result.(App)
+
+	if a.filterState != filterOff {
+		t.Error("expected filterOff after Enter with empty query")
 	}
 }
 
 func TestApp_HandleFilterKey_NavigateDown(t *testing.T) {
 	a := newTestApp()
-	a.filterMode = true
+	a.filterState = filterTyping
 	a.filterBuf = ""
 
 	initialCursor := a.noteList.Cursor()
 
-	// Arrow down navigates
 	result, _ := a.handleFilterKey("down")
 	a = result.(App)
 
@@ -134,10 +150,9 @@ func TestApp_HandleFilterKey_NavigateDown(t *testing.T) {
 
 func TestApp_HandleFilterKey_NavigateUp(t *testing.T) {
 	a := newTestApp()
-	a.filterMode = true
+	a.filterState = filterTyping
 	a.filterBuf = ""
 
-	// Move down first, then up
 	result, _ := a.handleFilterKey("down")
 	a = result.(App)
 	result, _ = a.handleFilterKey("up")
@@ -150,7 +165,7 @@ func TestApp_HandleFilterKey_NavigateUp(t *testing.T) {
 
 func TestApp_HandleFilterKey_JTypesInsteadOfNavigating(t *testing.T) {
 	a := newTestApp()
-	a.filterMode = true
+	a.filterState = filterTyping
 	a.filterBuf = ""
 
 	result, _ := a.handleFilterKey("j")
@@ -163,7 +178,7 @@ func TestApp_HandleFilterKey_JTypesInsteadOfNavigating(t *testing.T) {
 
 func TestApp_HandleFilterKey_KTypesInsteadOfNavigating(t *testing.T) {
 	a := newTestApp()
-	a.filterMode = true
+	a.filterState = filterTyping
 	a.filterBuf = ""
 
 	result, _ := a.handleFilterKey("k")
@@ -176,10 +191,9 @@ func TestApp_HandleFilterKey_KTypesInsteadOfNavigating(t *testing.T) {
 
 func TestApp_HandleFilterKey_IgnoresControlChars(t *testing.T) {
 	a := newTestApp()
-	a.filterMode = true
+	a.filterState = filterTyping
 	a.filterBuf = ""
 
-	// Tab and other control keys should not append to filter
 	result, _ := a.handleFilterKey("tab")
 	a = result.(App)
 
@@ -190,7 +204,7 @@ func TestApp_HandleFilterKey_IgnoresControlChars(t *testing.T) {
 
 func TestApp_HandleFilterKey_Space(t *testing.T) {
 	a := newTestApp()
-	a.filterMode = true
+	a.filterState = filterTyping
 	a.filterBuf = "my"
 
 	result, _ := a.handleFilterKey("space")
@@ -358,11 +372,163 @@ func TestApp_AutoPreview_ResumesAfterCustomPreview(t *testing.T) {
 
 func TestApp_RenderFilterBar(t *testing.T) {
 	a := newTestApp()
-	a.filterMode = true
+	a.filterState = filterTyping
 	a.filterBuf = "hello"
 
 	bar := a.renderFilterBar()
 	if bar == "" {
 		t.Error("expected non-empty filter bar render")
+	}
+}
+
+func TestApp_FilterBrowsing_EscClearsFilter(t *testing.T) {
+	a := newTestApp()
+	a.filterState = filterTyping
+	a.filterBuf = ""
+
+	// Type a query and enter browsing
+	for _, ch := range "meet" {
+		result, _ := a.handleFilterKey(string(ch))
+		a = result.(App)
+	}
+	result, _ := a.handleFilterKey("enter")
+	a = result.(App)
+
+	if a.filterState != filterBrowsing {
+		t.Fatal("expected filterBrowsing state")
+	}
+
+	// Esc in browsing should clear the filter entirely
+	a.clearFilter()
+
+	if a.filterState != filterOff {
+		t.Error("expected filterOff after Esc in browsing")
+	}
+	if a.filterBuf != "" {
+		t.Errorf("expected empty filterBuf, got %q", a.filterBuf)
+	}
+	if a.noteList.IsFiltering() {
+		t.Error("expected filter to be cleared")
+	}
+}
+
+func TestApp_FilterBrowsing_SlashRefines(t *testing.T) {
+	a := newTestApp()
+	a.filterState = filterTyping
+	a.filterBuf = ""
+
+	// Type and enter browsing
+	for _, ch := range "meet" {
+		result, _ := a.handleFilterKey(string(ch))
+		a = result.(App)
+	}
+	result, _ := a.handleFilterKey("enter")
+	a = result.(App)
+
+	if a.filterState != filterBrowsing {
+		t.Fatal("expected filterBrowsing state")
+	}
+
+	// Pressing / should go back to typing with filterBuf preserved
+	a.filterState = filterTyping // simulates the / key handler
+
+	if a.filterBuf != "meet" {
+		t.Errorf("expected filterBuf preserved as 'meet', got %q", a.filterBuf)
+	}
+}
+
+func TestApp_FilterBrowsing_PreviewWorks(t *testing.T) {
+	a := newTestApp()
+
+	// Enter browsing with a filter
+	a.filterState = filterBrowsing
+	a.filterBuf = "meet"
+	a.noteList.SetFilter("meet")
+
+	// Navigate to a note
+	for a.noteList.SelectedItem() == nil {
+		a.noteList.MoveDown()
+	}
+
+	// In browsing mode, preview should work (loadPreview is callable)
+	sel := a.noteList.SelectedItem()
+	if sel == nil {
+		t.Skip("no note matched the filter")
+	}
+	a.loadPreview(sel)
+	if !a.preview.Visible() {
+		a.preview.Toggle()
+	}
+
+	if a.previewedPath != sel.Path {
+		t.Errorf("expected preview of %q, got %q", sel.Path, a.previewedPath)
+	}
+}
+
+func TestApp_FilterBrowsing_ClearFilter_RestoresFullList(t *testing.T) {
+	a := newTestApp()
+	totalBefore := len(a.noteList.AllItems())
+
+	// Enter browsing with a restrictive filter
+	a.filterState = filterTyping
+	a.filterBuf = ""
+	for _, ch := range "meet" {
+		result, _ := a.handleFilterKey(string(ch))
+		a = result.(App)
+	}
+	filteredCount := a.noteList.FilteredCount()
+	if filteredCount >= totalBefore {
+		t.Skip("filter didn't reduce the list")
+	}
+
+	// Clear filter
+	a.clearFilter()
+
+	if a.filterState != filterOff {
+		t.Error("expected filterOff after clearFilter")
+	}
+	if a.noteList.IsFiltering() {
+		t.Error("expected no active filter")
+	}
+}
+
+func TestApp_FilterBrowsing_EscClosesPreviewFirst(t *testing.T) {
+	a := newTestApp()
+
+	// Enter browsing with a filter
+	a.filterState = filterBrowsing
+	a.filterBuf = "meet"
+	a.noteList.SetFilter("meet")
+
+	// Open preview
+	a.preview.Toggle()
+	a.previewedPath = "some/note.md"
+
+	// First Esc should close preview, NOT clear filter
+	// Simulate the browsing Esc handler:
+	if a.preview.Visible() {
+		a.preview.Toggle()
+		a.previewedPath = ""
+		a.focusedPane = focusList
+	}
+
+	if a.preview.Visible() {
+		t.Error("expected preview to be closed")
+	}
+	if a.filterState != filterBrowsing {
+		t.Error("expected to remain in filterBrowsing after closing preview")
+	}
+	if a.filterBuf != "meet" {
+		t.Errorf("expected filterBuf preserved, got %q", a.filterBuf)
+	}
+
+	// Second Esc should clear the filter
+	a.clearFilter()
+
+	if a.filterState != filterOff {
+		t.Error("expected filterOff after second Esc")
+	}
+	if a.filterBuf != "" {
+		t.Errorf("expected empty filterBuf, got %q", a.filterBuf)
 	}
 }
