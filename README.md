@@ -108,6 +108,18 @@ This creates `ideas/my-first-note.md` and opens it in your editor. When you save
 | **q** | Close preview/help if open, otherwise quit |
 | **Ctrl+C** | Quit immediately |
 
+### Search syntax
+
+Press `/` to start searching. Type your query, press **Enter** to lock results and browse them with normal keybindings, press **Esc** to clear.
+
+| Pattern | Meaning |
+|---------|---------|
+| `foo` | Fuzzy match "foo" in title, path, folder, tags, and content |
+| `foo bar` | Match "foo" **AND** "bar" (both must match) |
+| `"exact phrase"` | Match exact phrase (substring) |
+| `#tag` | Filter by tag name |
+| `foo #work` | Match "foo" AND notes tagged "work" |
+
 ### Navigation extras
 
 | Key | Action |

@@ -11,6 +11,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
+	"github.com/cassiomarques/memoria/internal/note"
 	"github.com/cassiomarques/memoria/internal/service"
 	"github.com/cassiomarques/memoria/internal/tui/components"
 	"github.com/cassiomarques/memoria/internal/tui/theme"
@@ -1223,7 +1224,7 @@ func (a *App) cmdHelp() {
 | Key | Action |
 |-----|--------|
 | **:** | Open command bar |
-| **/** | Fuzzy filter notes (type to search, ↑/↓ navigate, Enter open, Esc cancel) |
+| **/** | Search/filter notes |
 | **Tab** | Switch focus / autocomplete |
 | **p** | Preview selected note |
 | **e** | Edit previewed note (when preview focused) |
@@ -1238,6 +1239,18 @@ func (a *App) cmdHelp() {
 | **?** | Show help |
 | **Esc/q** | Close preview/help |
 | **q** | Quit (when only tree visible) |
+
+## Search Syntax
+
+| Pattern | Meaning |
+|---------|---------|
+| **foo** | Fuzzy match word "foo" |
+| **foo bar** | Match "foo" AND "bar" (both must match) |
+| **"exact phrase"** | Match exact phrase |
+| **#tag** | Filter by tag |
+| **foo #work** | Match "foo" AND tag "work" |
+
+Type **/** to start searching, **Enter** to lock results and browse, **Esc** to clear.
 `
 	a.preview.SetContent("Help", helpContent)
 	a.previewedPath = ""
@@ -1330,6 +1343,7 @@ func (a App) handleFilterKey(key string) (tea.Model, tea.Cmd) {
 
 // applyFilter runs the combined filter: Bleve content search + in-memory
 // fuzzy match on title/path/folder/tags, merged and deduped.
+// Uses parsed query tokens with AND semantics.
 func (a *App) applyFilter() {
 	if a.filterBuf == "" {
 		a.noteList.ClearFilter()
@@ -1338,10 +1352,13 @@ func (a *App) applyFilter() {
 		return
 	}
 
+	tokens := note.ParseQuery(a.filterBuf)
+	tagTokens := note.TagTokens(tokens)
+
 	seen := make(map[string]bool)
 	var items []components.NoteItem
 
-	// Phase 1: Bleve full-text search (searches note content, title, tags, folder)
+	// Phase 1: Bleve full-text search (handles text/phrase tokens)
 	if a.svc != nil {
 		results, err := a.svc.SearchFuzzy(a.filterBuf, 50)
 		if err == nil {
@@ -1351,6 +1368,10 @@ func (a *App) applyFilter() {
 				}
 				n, err := a.svc.Get(r.Path)
 				if err != nil {
+					continue
+				}
+				// Also check tag filters (Bleve doesn't handle #tag syntax)
+				if !matchesTags(n.Tags, tagTokens) {
 					continue
 				}
 				seen[r.Path] = true
@@ -1381,6 +1402,23 @@ func (a *App) applyFilter() {
 
 	a.noteList.SetFilteredItems(items, a.filterBuf)
 	a.updateFilterStatus()
+}
+
+// matchesTags checks that all tag tokens match at least one of the note's tags.
+func matchesTags(noteTags []string, tagTokens []note.QueryToken) bool {
+	for _, tok := range tagTokens {
+		found := false
+		for _, t := range noteTags {
+			if strings.EqualFold(t, tok.Text) {
+				found = true
+				break
+			}
+		}
+		if !found {
+			return false
+		}
+	}
+	return true
 }
 
 // clearFilter resets filter state to off and restores the full note list.

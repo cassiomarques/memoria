@@ -8,6 +8,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
+	"github.com/cassiomarques/memoria/internal/note"
 	"github.com/cassiomarques/memoria/internal/tui/theme"
 )
 
@@ -733,41 +734,84 @@ func fuzzyMatch(pattern, target string) (bool, int) {
 	return true, score
 }
 
-// NoteMatchesFilter checks whether a NoteItem matches the filter pattern.
-// It fuzzy-matches against the title, folder path, and tags, returning the
-// best (lowest) score found.
+// NoteMatchesFilter checks whether a NoteItem matches the filter query.
+// Uses parsed query tokens: all tokens must match (AND semantics).
+// Regular words are fuzzy-matched against title/path/folder/tags.
+// Quoted phrases require an exact substring match.
+// #tag tokens match against the note's tags.
 func NoteMatchesFilter(item *NoteItem, pattern string) (bool, int) {
-	bestScore := int(^uint(0) >> 1) // max int
-	matched := false
+	tokens := note.ParseQuery(pattern)
+	if len(tokens) == 0 {
+		return true, 0
+	}
 
-	if ok, s := fuzzyMatch(pattern, item.Title); ok {
-		matched = true
-		if s < bestScore {
-			bestScore = s
+	totalScore := 0
+
+	for _, tok := range tokens {
+		if tok.Tag {
+			// Tag filter: check if any tag matches
+			found := false
+			for _, t := range item.Tags {
+				if strings.EqualFold(t, tok.Text) {
+					found = true
+					break
+				}
+			}
+			if !found {
+				return false, 0
+			}
+			continue
 		}
-	}
-	if ok, s := fuzzyMatch(pattern, item.Path); ok {
-		matched = true
-		if s < bestScore {
-			bestScore = s
+
+		if tok.Exact {
+			// Exact phrase: substring match in title, path, folder, or tag
+			found := false
+			for _, field := range []string{item.Title, item.Path, item.Folder} {
+				if strings.Contains(strings.ToLower(field), tok.Text) {
+					found = true
+					break
+				}
+			}
+			if !found {
+				for _, t := range item.Tags {
+					if strings.Contains(strings.ToLower(t), tok.Text) {
+						found = true
+						break
+					}
+				}
+			}
+			if !found {
+				return false, 0
+			}
+			continue
 		}
-	}
-	if ok, s := fuzzyMatch(pattern, item.Folder); ok {
-		matched = true
-		if s < bestScore {
-			bestScore = s
-		}
-	}
-	for _, tag := range item.Tags {
-		if ok, s := fuzzyMatch(pattern, tag); ok {
-			matched = true
-			if s < bestScore {
-				bestScore = s
+
+		// Regular word: fuzzy match against title/path/folder/tags
+		bestScore := int(^uint(0) >> 1)
+		matched := false
+		for _, field := range []string{item.Title, item.Path, item.Folder} {
+			if ok, s := fuzzyMatch(tok.Text, field); ok {
+				matched = true
+				if s < bestScore {
+					bestScore = s
+				}
 			}
 		}
+		for _, t := range item.Tags {
+			if ok, s := fuzzyMatch(tok.Text, t); ok {
+				matched = true
+				if s < bestScore {
+					bestScore = s
+				}
+			}
+		}
+		if !matched {
+			return false, 0
+		}
+		totalScore += bestScore
 	}
 
-	return matched, bestScore
+	return true, totalScore
 }
 
 // SetFilter applies a fuzzy filter to the note list. Only notes matching the

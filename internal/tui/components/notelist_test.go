@@ -1018,6 +1018,136 @@ func TestNoteList_FilteredCount(t *testing.T) {
 	}
 }
 
+// --- Search DSL / NoteMatchesFilter tests ---
+
+func TestNoteMatchesFilter_AND_MultipleWords(t *testing.T) {
+	item := &NoteItem{Path: "dotcom/running_azure.md", Title: "running_azure", Folder: "Dotcom", Tags: []string{"azure"}}
+	// Both "running" and "azure" appear → should match
+	ok, _ := NoteMatchesFilter(item, "running azure")
+	if !ok {
+		t.Error("expected 'running azure' to match 'running_azure' (AND)")
+	}
+	// "running" matches but "mysql" does not → should NOT match
+	ok, _ = NoteMatchesFilter(item, "running mysql")
+	if ok {
+		t.Error("expected 'running mysql' to NOT match 'running_azure' (AND requires both)")
+	}
+}
+
+func TestNoteMatchesFilter_ExactPhrase(t *testing.T) {
+	item := &NoteItem{Path: "random/mysql_extended.md", Title: "mysql_extended", Folder: "Random", Tags: []string{"db"}}
+	// Exact match present
+	ok, _ := NoteMatchesFilter(item, `"mysql_extended"`)
+	if !ok {
+		t.Error(`expected "mysql_extended" exact phrase to match`)
+	}
+	// Exact match NOT present (wrong order/not substring)
+	ok, _ = NoteMatchesFilter(item, `"extended_mysql"`)
+	if ok {
+		t.Error(`expected "extended_mysql" exact phrase NOT to match`)
+	}
+}
+
+func TestNoteMatchesFilter_TagFilter(t *testing.T) {
+	item := &NoteItem{Path: "dotcom/running_azure.md", Title: "running_azure", Folder: "Dotcom", Tags: []string{"azure", "cloud"}}
+	// Tag exists
+	ok, _ := NoteMatchesFilter(item, "#azure")
+	if !ok {
+		t.Error("expected #azure to match note with tag 'azure'")
+	}
+	// Tag does not exist
+	ok, _ = NoteMatchesFilter(item, "#python")
+	if ok {
+		t.Error("expected #python NOT to match note without tag 'python'")
+	}
+}
+
+func TestNoteMatchesFilter_TagAndWord(t *testing.T) {
+	item := &NoteItem{Path: "dotcom/running_azure.md", Title: "running_azure", Folder: "Dotcom", Tags: []string{"azure"}}
+	// Word matches AND tag matches
+	ok, _ := NoteMatchesFilter(item, "running #azure")
+	if !ok {
+		t.Error("expected 'running #azure' to match")
+	}
+	// Word matches but tag doesn't
+	ok, _ = NoteMatchesFilter(item, "running #python")
+	if ok {
+		t.Error("expected 'running #python' NOT to match (tag mismatch)")
+	}
+}
+
+func TestNoteMatchesFilter_EmptyQuery(t *testing.T) {
+	item := &NoteItem{Path: "daily.md", Title: "daily", Folder: ""}
+	ok, _ := NoteMatchesFilter(item, "")
+	if !ok {
+		t.Error("expected empty query to match everything")
+	}
+}
+
+func TestNoteMatchesFilter_ExactPhraseInFolder(t *testing.T) {
+	item := &NoteItem{Path: "projects/codecoverage/qa_report.md", Title: "qa_report", Folder: "Projects/CodeCoverage", Tags: []string{"qa"}}
+	ok, _ := NoteMatchesFilter(item, `"codecoverage"`)
+	if !ok {
+		t.Error(`expected "codecoverage" to match folder name`)
+	}
+}
+
+func TestNoteList_SetFilter_AND_MultipleWords(t *testing.T) {
+	nl := NewNoteList()
+	nl.SetItems(sampleItems())
+	nl.SetSize(80, 40)
+
+	// "qa report" should only match qa_report (has both "qa" and "report")
+	nl.SetFilter("qa report")
+
+	found := false
+	for _, node := range nl.flatVisible {
+		if !node.isFolder && node.noteItem != nil && node.noteItem.Title == "qa_report" {
+			found = true
+		}
+	}
+	if !found {
+		t.Error("expected 'qa report' filter to find 'qa_report'")
+	}
+
+	// e2e_stream has tag "qa" but no "report" → should NOT appear
+	for _, node := range nl.flatVisible {
+		if !node.isFolder && node.noteItem != nil && node.noteItem.Title == "e2e_stream" {
+			t.Error("expected 'qa report' filter NOT to find 'e2e_stream' (missing 'report')")
+		}
+	}
+}
+
+func TestNoteList_SetFilter_TagFilter(t *testing.T) {
+	nl := NewNoteList()
+	nl.SetItems(sampleItems())
+	nl.SetSize(80, 40)
+
+	nl.SetFilter("#qa")
+
+	noteCount := 0
+	for _, node := range nl.flatVisible {
+		if !node.isFolder && node.noteItem != nil {
+			noteCount++
+			if node.noteItem.Tags == nil || !containsTag(node.noteItem.Tags, "qa") {
+				t.Errorf("expected only notes with tag 'qa', found %q", node.noteItem.Title)
+			}
+		}
+	}
+	if noteCount != 2 {
+		t.Errorf("expected 2 notes with tag 'qa', got %d", noteCount)
+	}
+}
+
+func containsTag(tags []string, tag string) bool {
+	for _, t := range tags {
+		if t == tag {
+			return true
+		}
+	}
+	return false
+}
+
 // --- Bookmark/Pin tests ---
 
 func TestBuildTree_PinnedVirtualSection(t *testing.T) {

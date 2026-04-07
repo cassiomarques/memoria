@@ -129,24 +129,33 @@ func (s *SearchIndex) Search(queryStr string, limit int) ([]SearchResult, error)
 }
 
 // SearchFuzzy performs a typo-tolerant search using MatchQuery with fuzziness on each term.
+// SearchFuzzy performs a full-text search using parsed query tokens.
+// Multiple words are AND'd: a note must match all tokens.
+// Quoted phrases are matched as exact match phrases.
+// Tag tokens (#tag) are ignored here (handled by the caller).
 func (s *SearchIndex) SearchFuzzy(queryStr string, limit int) ([]SearchResult, error) {
 	if limit <= 0 {
 		limit = 20
 	}
 
-	terms := strings.Fields(queryStr)
-	if len(terms) == 0 {
+	tokens := note.TextTokens(note.ParseQuery(queryStr))
+	if len(tokens) == 0 {
 		return []SearchResult{}, nil
 	}
 
-	disjuncts := make([]query.Query, 0, len(terms))
-	for _, term := range terms {
-		mq := bleve.NewMatchQuery(term)
-		mq.SetFuzziness(2)
-		disjuncts = append(disjuncts, mq)
+	conjuncts := make([]query.Query, 0, len(tokens))
+	for _, tok := range tokens {
+		if tok.Exact {
+			pq := bleve.NewMatchPhraseQuery(tok.Text)
+			conjuncts = append(conjuncts, pq)
+		} else {
+			mq := bleve.NewMatchQuery(tok.Text)
+			mq.SetFuzziness(2)
+			conjuncts = append(conjuncts, mq)
+		}
 	}
 
-	q := query.NewDisjunctionQuery(disjuncts)
+	q := query.NewConjunctionQuery(conjuncts)
 	req := bleve.NewSearchRequest(q)
 	req.Size = limit
 	req.Highlight = bleve.NewHighlight()
