@@ -1399,3 +1399,116 @@ func TestNoteList_ViewShowsJustNow(t *testing.T) {
 		t.Errorf("expected view to contain 'just now', got:\n%s", view)
 	}
 }
+
+func TestNoteList_TodoFolderSortsToTop(t *testing.T) {
+	items := []NoteItem{
+		{Path: "alpha/note1.md", Title: "Note 1", Folder: "Alpha"},
+		{Path: "todo/buy-milk.md", Title: "Buy Milk", Folder: "TODO", Todo: true},
+		{Path: "beta/note2.md", Title: "Note 2", Folder: "Beta"},
+	}
+
+	nl := NewNoteList()
+	nl.SetSize(80, 20)
+	nl.SetTodoFolder("TODO")
+	nl.SetItems(items)
+
+	// Walk the flat visible list; the first folder should be TODO
+	var firstFolder string
+	for _, node := range nl.flatVisible {
+		if node.isFolder && node.fullPath != "__pinned__" {
+			firstFolder = node.name
+			break
+		}
+	}
+
+	if firstFolder != "TODO" {
+		t.Errorf("expected first folder to be TODO, got %q", firstFolder)
+	}
+}
+
+func TestNoteList_TodoFolderSortCaseInsensitive(t *testing.T) {
+	items := []NoteItem{
+		{Path: "alpha/note1.md", Title: "Note 1", Folder: "Alpha"},
+		{Path: "todo/buy-milk.md", Title: "Buy Milk", Folder: "todo", Todo: true},
+		{Path: "beta/note2.md", Title: "Note 2", Folder: "Beta"},
+	}
+
+	nl := NewNoteList()
+	nl.SetSize(80, 20)
+	nl.SetTodoFolder("TODO") // config says "TODO" but folder is lowercase "todo"
+	nl.SetItems(items)
+
+	var firstFolder string
+	for _, node := range nl.flatVisible {
+		if node.isFolder && node.fullPath != "__pinned__" {
+			firstFolder = node.name
+			break
+		}
+	}
+
+	if firstFolder != "todo" {
+		t.Errorf("expected first folder to be 'todo', got %q", firstFolder)
+	}
+}
+
+func TestNoteList_TodoEmojiRendering(t *testing.T) {
+	due := time.Date(2026, 4, 15, 0, 0, 0, 0, time.UTC)
+	items := []NoteItem{
+		{Path: "TODO/pending-task.md", Title: "Pending Task", Folder: "TODO", Todo: true, Done: false, Due: &due},
+		{Path: "TODO/done-task.md", Title: "Done Task", Folder: "TODO", Todo: true, Done: true},
+		{Path: "work/regular.md", Title: "Regular Note", Folder: "work"},
+	}
+
+	nl := NewNoteList()
+	nl.SetSize(80, 20)
+	nl.SetItems(items)
+
+	view := nl.View()
+
+	if !containsSubstring(view, "⭕") {
+		t.Error("expected view to contain ⭕ for pending todo")
+	}
+	if !containsSubstring(view, "✅") {
+		t.Error("expected view to contain ✅ for done todo")
+	}
+	// Regular notes should NOT have todo emojis in their line
+	if containsSubstring(view, "⭕ Regular Note") || containsSubstring(view, "✅ Regular Note") {
+		t.Error("regular note should not have todo emoji prefix")
+	}
+}
+
+func TestNoteList_TodoDueDateSuffix(t *testing.T) {
+	due := time.Date(2026, 4, 15, 0, 0, 0, 0, time.UTC)
+	items := []NoteItem{
+		{Path: "TODO/task.md", Title: "Task With Due", Folder: "TODO", Todo: true, Done: false, Due: &due},
+		{Path: "TODO/no-due.md", Title: "Task No Due", Folder: "TODO", Todo: true, Done: false},
+	}
+
+	nl := NewNoteList()
+	nl.SetSize(80, 20)
+	nl.SetItems(items)
+
+	view := nl.View()
+
+	if !containsSubstring(view, "@2026-04-15") {
+		t.Errorf("expected view to contain due date suffix '@2026-04-15', got:\n%s", view)
+	}
+}
+
+func TestNoteList_DoneTodoNoDueSuffix(t *testing.T) {
+	due := time.Date(2026, 4, 15, 0, 0, 0, 0, time.UTC)
+	items := []NoteItem{
+		{Path: "TODO/done.md", Title: "Done Task", Folder: "TODO", Todo: true, Done: true, Due: &due},
+	}
+
+	nl := NewNoteList()
+	nl.SetSize(80, 20)
+	nl.SetItems(items)
+
+	view := nl.View()
+
+	// Done todos should NOT show the due date suffix
+	if containsSubstring(view, "@2026-04-15") {
+		t.Error("done todo should not show due date suffix")
+	}
+}

@@ -678,25 +678,16 @@ func TestE2E_GitCommitHistory(t *testing.T) {
 	// Baseline: the setupService creates a git repo; count initial commits
 	initialCommits := countCommits(t, root)
 
+	// Commits now happen in the background git worker. We use waitCommit()
+	// to give the worker time to process each request before checking.
+
 	// Step 1: Create a note → verify git has a commit
 	t.Run("CreateCommit", func(t *testing.T) {
 		_, err := svc.Create("git-test", "Testing git integration", []string{"git"})
 		if err != nil {
 			t.Fatalf("Create: %v", err)
 		}
-
-		commits := countCommits(t, root)
-		if commits <= initialCommits {
-			t.Errorf("expected new commit after create, got %d (was %d)", commits, initialCommits)
-		}
-
-		hasChanges, err := svc.repo.HasChanges()
-		if err != nil {
-			t.Fatalf("HasChanges: %v", err)
-		}
-		if hasChanges {
-			t.Error("expected no uncommitted changes after create")
-		}
+		waitCommit(t, root, initialCommits)
 	})
 
 	commitsAfterCreate := countCommits(t, root)
@@ -716,19 +707,7 @@ func TestE2E_GitCommitHistory(t *testing.T) {
 		if !changed {
 			t.Error("expected AfterEdit to report changes")
 		}
-
-		commits := countCommits(t, root)
-		if commits <= commitsAfterCreate {
-			t.Errorf("expected new commit after edit, got %d (was %d)", commits, commitsAfterCreate)
-		}
-
-		hasChanges, err := svc.repo.HasChanges()
-		if err != nil {
-			t.Fatalf("HasChanges: %v", err)
-		}
-		if hasChanges {
-			t.Error("expected no uncommitted changes after edit")
-		}
+		waitCommit(t, root, commitsAfterCreate)
 	})
 
 	commitsAfterEdit := countCommits(t, root)
@@ -738,18 +717,6 @@ func TestE2E_GitCommitHistory(t *testing.T) {
 		if err := svc.Delete("git-test.md"); err != nil {
 			t.Fatalf("Delete: %v", err)
 		}
-
-		commits := countCommits(t, root)
-		if commits <= commitsAfterEdit {
-			t.Errorf("expected new commit after delete, got %d (was %d)", commits, commitsAfterEdit)
-		}
-
-		hasChanges, err := svc.repo.HasChanges()
-		if err != nil {
-			t.Fatalf("HasChanges: %v", err)
-		}
-		if hasChanges {
-			t.Error("expected no uncommitted changes after delete")
-		}
+		waitCommit(t, root, commitsAfterEdit)
 	})
 }

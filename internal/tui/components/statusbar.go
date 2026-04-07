@@ -37,7 +37,8 @@ func (s *StatusBar) SetMessage(msg string, style lipgloss.Style) {
 	s.message = msg
 	s.messageStyle = style
 }
-func (s *StatusBar) ClearMessage() { s.message = "" }
+func (s *StatusBar) ClearMessage()   { s.message = "" }
+func (s *StatusBar) Message() string { return s.message }
 
 func (s StatusBar) Init() tea.Cmd { return nil }
 

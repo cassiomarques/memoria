@@ -45,7 +45,23 @@ func setupService(t *testing.T) *NoteService {
 
 	ed := editor.New("cat") // harmless editor for tests
 
-	return New(files, meta, idx, repo, ed)
+	svc := New(files, meta, idx, repo, ed)
+	t.Cleanup(func() { svc.Close() })
+	return svc
+}
+
+// waitCommit polls until the commit count exceeds prev, or times out.
+// Used to wait for the background git worker to process a commit.
+func waitCommit(t *testing.T, root string, prev int) {
+	t.Helper()
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		if countCommits(t, root) > prev {
+			return
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	t.Fatalf("timed out waiting for commit (still at %d)", prev)
 }
 
 func TestCreate(t *testing.T) {
@@ -741,6 +757,7 @@ func TestNilOptionalComponents(t *testing.T) {
 
 	// No search, no git, no editor
 	svc := New(files, meta, nil, nil, nil)
+	t.Cleanup(func() { svc.Close() })
 
 	n, err := svc.Create("minimal.md", "Minimal note", nil)
 	if err != nil {
@@ -1239,5 +1256,124 @@ func TestMoveFolder_NestedNotes(t *testing.T) {
 	}
 	if nm2.Folder != "Renamed/Sub" {
 		t.Errorf("expected folder 'Renamed/Sub', got %q", nm2.Folder)
+	}
+}
+
+// --- Todo integration tests ---
+
+func TestCreateTodo(t *testing.T) {
+	svc := setupService(t)
+
+	due := time.Date(2026, 4, 15, 0, 0, 0, 0, time.UTC)
+	n, err := svc.CreateTodo(CreateTodoOptions{
+		Title:  "fix auth bug",
+		Folder: "TODO",
+		Tags:   []string{"work"},
+		Due:    &due,
+	})
+	if err != nil {
+		t.Fatalf("CreateTodo: %v", err)
+	}
+
+	if n.Path != "TODO/fix-auth-bug.md" {
+		t.Errorf("expected path TODO/fix-auth-bug.md, got %s", n.Path)
+	}
+	if !n.Todo {
+		t.Error("expected Todo=true")
+	}
+	if n.Done {
+		t.Error("expected Done=false")
+	}
+	if n.Due == nil || n.Due.Format(time.DateOnly) != "2026-04-15" {
+		t.Errorf("expected due=2026-04-15, got %v", n.Due)
+	}
+	if len(n.Tags) != 1 || n.Tags[0] != "work" {
+		t.Errorf("expected tags=[work], got %v", n.Tags)
+	}
+
+	// Verify it was persisted to disk
+	loaded, err := svc.Get(n.Path)
+	if err != nil {
+		t.Fatalf("Get: %v", err)
+	}
+	if !loaded.Todo {
+		t.Error("loaded note should have Todo=true")
+	}
+
+	// Verify it's in the todos list
+	todos, err := svc.ListTodos()
+	if err != nil {
+		t.Fatalf("ListTodos: %v", err)
+	}
+	if len(todos) != 1 {
+		t.Fatalf("expected 1 todo, got %d", len(todos))
+	}
+	if todos[0].Path != n.Path {
+		t.Errorf("expected todo path %s, got %s", n.Path, todos[0].Path)
+	}
+}
+
+func TestToggleTodoDone(t *testing.T) {
+	svc := setupService(t)
+
+	n, err := svc.CreateTodo(CreateTodoOptions{
+		Title:  "buy milk",
+		Folder: "TODO",
+	})
+	if err != nil {
+		t.Fatalf("CreateTodo: %v", err)
+	}
+
+	// Toggle to done
+	done, err := svc.ToggleTodoDone(n.Path)
+	if err != nil {
+		t.Fatalf("ToggleTodoDone: %v", err)
+	}
+	if !done {
+		t.Error("expected done=true after first toggle")
+	}
+
+	// Verify on disk
+	loaded, err := svc.Get(n.Path)
+	if err != nil {
+		t.Fatalf("Get: %v", err)
+	}
+	if !loaded.Done {
+		t.Error("expected loaded note Done=true")
+	}
+
+	// Toggle back to undone
+	done, err = svc.ToggleTodoDone(n.Path)
+	if err != nil {
+		t.Fatalf("ToggleTodoDone: %v", err)
+	}
+	if done {
+		t.Error("expected done=false after second toggle")
+	}
+}
+
+func TestToggleTodoDone_NonTodo(t *testing.T) {
+	svc := setupService(t)
+
+	_, err := svc.Create("regular/note.md", "content", nil)
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+
+	_, err = svc.ToggleTodoDone("regular/note.md")
+	if err == nil {
+		t.Error("expected error when toggling non-todo note")
+	}
+}
+
+func TestCreateTodo_EmptyTitle(t *testing.T) {
+	svc := setupService(t)
+
+	_, err := svc.CreateTodo(CreateTodoOptions{
+		Title:  "",
+		Folder: "TODO",
+	})
+	if err == nil {
+		t.Error("expected error for empty title")
 	}
 }

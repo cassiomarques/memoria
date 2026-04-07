@@ -428,3 +428,40 @@ func TestEnsureDirsExpandsTilde(t *testing.T) {
 		t.Fatal("EnsureDirs did not create the notes directory")
 	}
 }
+
+func TestResolveDefaultTodoFolder(t *testing.T) {
+	// Default (nil) should return "TODO"
+	cfg := DefaultConfig()
+	if got := cfg.ResolveDefaultTodoFolder(); got != "TODO" {
+		t.Errorf("default ResolveDefaultTodoFolder() = %q, want %q", got, "TODO")
+	}
+
+	// Custom value
+	custom := "my-tasks"
+	cfg.DefaultTodoFolder = &custom
+	if got := cfg.ResolveDefaultTodoFolder(); got != "my-tasks" {
+		t.Errorf("custom ResolveDefaultTodoFolder() = %q, want %q", got, "my-tasks")
+	}
+}
+
+func TestResolveTodosEnabled(t *testing.T) {
+	// Default (nil) should return true
+	cfg := DefaultConfig()
+	if got := cfg.ResolveTodosEnabled(); !got {
+		t.Error("default ResolveTodosEnabled() should be true")
+	}
+
+	// Explicitly disabled
+	disabled := false
+	cfg.TodosEnabled = &disabled
+	if got := cfg.ResolveTodosEnabled(); got {
+		t.Error("ResolveTodosEnabled() should be false when set to false")
+	}
+
+	// Explicitly enabled
+	enabled := true
+	cfg.TodosEnabled = &enabled
+	if got := cfg.ResolveTodosEnabled(); !got {
+		t.Error("ResolveTodosEnabled() should be true when set to true")
+	}
+}

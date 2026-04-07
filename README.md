@@ -145,6 +145,8 @@ Type `:` to open the command bar. Tab completion is available for paths, folders
 | `mv` | `:mv <old> <new>` | Move or rename a note |
 | `rm` | `:rm <path>` | Delete a note |
 | `tags` | `:tags` | Show all tags with note counts |
+| `todo` | `:todo <title> [#tag] [@due(YYYY-MM-DD)] [--folder <path>]` | Create a todo note |
+| `todos` | `:todos` | Show all todos sorted by due date |
 | `sync` | `:sync` | Pull from remote and reload all notes |
 | `remote` | `:remote <git-url>` | Configure git remote |
 | `fixfm` | `:fixfm` | Add frontmatter to notes missing it |
@@ -173,6 +175,12 @@ show_pinned_notes: true
 
 # Show modification timestamps next to notes (default: true, toggle with t)
 show_timestamps: true
+
+# Default folder for todos created with :todo (default: "TODO")
+default_todo_folder: "TODO"
+
+# Enable/disable todo features (default: true)
+todos_enabled: true
 ```
 
 ### Editor resolution
@@ -203,6 +211,26 @@ modified: 2026-04-02T15:30:00Z
 
 Content goes here...
 ```
+
+### Todos
+
+Todo notes have extra frontmatter fields:
+
+```markdown
+---
+tags:
+  - work
+todo: true
+done: false
+due: 2026-04-15
+created: 2026-04-07T12:00:00Z
+modified: 2026-04-07T12:00:00Z
+---
+
+Details about the task...
+```
+
+Create todos with `:todo fix the auth bug #work @due(2026-04-15)`. Press **x** on a todo to toggle done/undone. Use `:todos` to see all todos sorted by due date. Overdue todos are shown in red, due-today in yellow, done items are dimmed.
 
 Notes live in `~/.memoria/notes/` and can be nested in folders:
 

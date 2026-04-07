@@ -16,6 +16,9 @@ type Note struct {
 	Folder   string   // directory portion of path (e.g., "work")
 	Created  time.Time
 	Modified time.Time
+	Todo     bool       // true if this note is a todo item
+	Done     bool       // true if this todo is completed
+	Due      *time.Time // optional due date for todos
 }
 
 // NewNote creates a new note, auto-setting Title from path, Folder from path,
@@ -76,6 +79,12 @@ func (n *Note) FullContent() string {
 		Tags:     n.Tags,
 		Created:  n.Created,
 		Modified: n.Modified,
+		Todo:     n.Todo,
+		Done:     n.Done,
+	}
+	if n.Due != nil {
+		d := DateOnly(*n.Due)
+		fm.Due = &d
 	}
 	serialized, err := fm.Serialize()
 	if err != nil {
@@ -120,4 +129,54 @@ func normalizeTags(tags []string) []string {
 		result[i] = normalizeTag(tag)
 	}
 	return result
+}
+
+// Slugify converts a human-readable title into a filename-safe slug.
+// "Fix Auth Bug" → "fix-auth-bug"
+func Slugify(title string) string {
+	s := strings.ToLower(strings.TrimSpace(title))
+
+	var b strings.Builder
+	prevDash := false
+	for _, r := range s {
+		switch {
+		case r >= 'a' && r <= 'z', r >= '0' && r <= '9':
+			b.WriteRune(r)
+			prevDash = false
+		case r == ' ' || r == '-' || r == '_':
+			if !prevDash && b.Len() > 0 {
+				b.WriteByte('-')
+				prevDash = true
+			}
+		}
+	}
+
+	result := b.String()
+	return strings.TrimRight(result, "-")
+}
+
+// IsOverdue returns true if the todo has a due date in the past (before today).
+func (n *Note) IsOverdue() bool {
+	if n.Due == nil || n.Done {
+		return false
+	}
+	today := truncateToDate(time.Now())
+	due := truncateToDate(*n.Due)
+	return due.Before(today)
+}
+
+// IsDueToday returns true if the todo is due today.
+func (n *Note) IsDueToday() bool {
+	if n.Due == nil || n.Done {
+		return false
+	}
+	today := truncateToDate(time.Now())
+	due := truncateToDate(*n.Due)
+	return due.Equal(today)
+}
+
+// truncateToDate strips the time component, keeping only the date in local time.
+func truncateToDate(t time.Time) time.Time {
+	y, m, d := t.Date()
+	return time.Date(y, m, d, 0, 0, 0, 0, time.Local)
 }

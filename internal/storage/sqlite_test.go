@@ -520,3 +520,156 @@ func TestListRecent_LimitExceedsTotal(t *testing.T) {
 		t.Errorf("expected 1 note, got %d", len(recent))
 	}
 }
+
+// --- Todo storage tests ---
+
+func TestUpsertNote_TodoFields(t *testing.T) {
+	store := newTestStore(t)
+	due := time.Date(2026, 4, 15, 0, 0, 0, 0, time.UTC)
+
+	n := makeNote(t, "TODO/buy-milk.md", "buy milk", []string{"shopping"})
+	n.Folder = "TODO"
+	n.Todo = true
+	n.Done = false
+	n.Due = &due
+
+	if err := store.UpsertNote(n); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := store.GetNote("TODO/buy-milk.md")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !got.Todo {
+		t.Error("expected Todo=true")
+	}
+	if got.Done {
+		t.Error("expected Done=false")
+	}
+	if got.Due == nil {
+		t.Fatal("expected Due to be non-nil")
+	}
+	if got.Due.Format(time.DateOnly) != "2026-04-15" {
+		t.Errorf("expected due=2026-04-15, got %s", got.Due.Format(time.DateOnly))
+	}
+}
+
+func TestListTodos_Empty(t *testing.T) {
+	store := newTestStore(t)
+
+	// Insert a regular (non-todo) note
+	n := makeNote(t, "regular.md", "content", nil)
+	if err := store.UpsertNote(n); err != nil {
+		t.Fatal(err)
+	}
+
+	todos, err := store.ListTodos()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(todos) != 0 {
+		t.Errorf("expected 0 todos, got %d", len(todos))
+	}
+}
+
+func TestListTodos_ReturnsTodosOnly(t *testing.T) {
+	store := newTestStore(t)
+
+	regular := makeNote(t, "work/meeting.md", "meeting notes", nil)
+	regular.Folder = "work"
+	if err := store.UpsertNote(regular); err != nil {
+		t.Fatal(err)
+	}
+
+	due := time.Date(2026, 4, 20, 0, 0, 0, 0, time.UTC)
+	todo1 := makeNote(t, "TODO/task-a.md", "task a", []string{"work"})
+	todo1.Folder = "TODO"
+	todo1.Todo = true
+	todo1.Due = &due
+	if err := store.UpsertNote(todo1); err != nil {
+		t.Fatal(err)
+	}
+
+	todo2 := makeNote(t, "TODO/task-b.md", "task b", nil)
+	todo2.Folder = "TODO"
+	todo2.Todo = true
+	todo2.Done = true
+	if err := store.UpsertNote(todo2); err != nil {
+		t.Fatal(err)
+	}
+
+	todos, err := store.ListTodos()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(todos) != 2 {
+		t.Fatalf("expected 2 todos, got %d", len(todos))
+	}
+	// Pending (done=false) should come before done (done=true)
+	if todos[0].Done {
+		t.Error("expected first todo to be pending (not done)")
+	}
+	if !todos[1].Done {
+		t.Error("expected second todo to be done")
+	}
+}
+
+func TestSetTodoDone(t *testing.T) {
+	store := newTestStore(t)
+
+	n := makeNote(t, "TODO/fix-bug.md", "fix the bug", nil)
+	n.Folder = "TODO"
+	n.Todo = true
+	n.Done = false
+	if err := store.UpsertNote(n); err != nil {
+		t.Fatal(err)
+	}
+
+	// Mark done
+	if err := store.SetTodoDone("TODO/fix-bug.md", true); err != nil {
+		t.Fatal(err)
+	}
+	got, err := store.GetNote("TODO/fix-bug.md")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !got.Done {
+		t.Error("expected Done=true after SetTodoDone(true)")
+	}
+
+	// Mark undone
+	if err := store.SetTodoDone("TODO/fix-bug.md", false); err != nil {
+		t.Fatal(err)
+	}
+	got, err = store.GetNote("TODO/fix-bug.md")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Done {
+		t.Error("expected Done=false after SetTodoDone(false)")
+	}
+}
+
+func TestSetTodoDone_NonTodoFails(t *testing.T) {
+	store := newTestStore(t)
+
+	n := makeNote(t, "regular.md", "regular note", nil)
+	if err := store.UpsertNote(n); err != nil {
+		t.Fatal(err)
+	}
+
+	err := store.SetTodoDone("regular.md", true)
+	if err == nil {
+		t.Error("expected error when setting done on non-todo note")
+	}
+}
+
+func TestSetTodoDone_NonExistentFails(t *testing.T) {
+	store := newTestStore(t)
+
+	err := store.SetTodoDone("nonexistent.md", true)
+	if err == nil {
+		t.Error("expected error when setting done on nonexistent note")
+	}
+}

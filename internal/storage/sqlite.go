@@ -3,6 +3,7 @@ package storage
 import (
 	"database/sql"
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/cassiomarques/memoria/internal/note"
@@ -19,6 +20,9 @@ type NoteMeta struct {
 	Tags     []string
 	Created  time.Time
 	Modified time.Time
+	Todo     bool
+	Done     bool
+	Due      *time.Time
 }
 
 // TagInfo holds a tag name and how many notes use it.
@@ -100,7 +104,49 @@ func migrate(db *sql.DB) error {
 			return err
 		}
 	}
+
+	// Idempotent column additions for todo support
+	todoColumns := []struct {
+		name string
+		ddl  string
+	}{
+		{"todo", `ALTER TABLE notes ADD COLUMN todo BOOLEAN NOT NULL DEFAULT 0`},
+		{"done", `ALTER TABLE notes ADD COLUMN done BOOLEAN NOT NULL DEFAULT 0`},
+		{"due", `ALTER TABLE notes ADD COLUMN due DATETIME`},
+	}
+	for _, col := range todoColumns {
+		if !hasColumn(db, "notes", col.name) {
+			if _, err := db.Exec(col.ddl); err != nil {
+				return fmt.Errorf("adding column %s: %w", col.name, err)
+			}
+		}
+	}
+
 	return nil
+}
+
+// hasColumn checks whether a table has a column with the given name.
+func hasColumn(db *sql.DB, table, column string) bool {
+	rows, err := db.Query(fmt.Sprintf("PRAGMA table_info(%s)", table))
+	if err != nil {
+		return false
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var cid int
+		var name, ctype string
+		var notnull int
+		var dflt sql.NullString
+		var pk int
+		if err := rows.Scan(&cid, &name, &ctype, &notnull, &dflt, &pk); err != nil {
+			return false
+		}
+		if name == column {
+			return true
+		}
+	}
+	return false
 }
 
 // Close closes the underlying database connection.
@@ -117,14 +163,17 @@ func (m *MetaStore) UpsertNote(n *note.Note) error {
 	defer tx.Rollback()
 
 	_, err = tx.Exec(`
-		INSERT INTO notes (path, title, folder, created, modified)
-		VALUES (?, ?, ?, ?, ?)
+		INSERT INTO notes (path, title, folder, created, modified, todo, done, due)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(path) DO UPDATE SET
 			title    = excluded.title,
 			folder   = excluded.folder,
 			created  = excluded.created,
-			modified = excluded.modified`,
-		n.Path, n.Title, n.Folder, n.Created, n.Modified,
+			modified = excluded.modified,
+			todo     = excluded.todo,
+			done     = excluded.done,
+			due      = excluded.due`,
+		n.Path, n.Title, n.Folder, n.Created, n.Modified, n.Todo, n.Done, n.Due,
 	)
 	if err != nil {
 		return err
@@ -179,8 +228,8 @@ func (m *MetaStore) MoveNote(oldPath, newPath string, newFolder string) error {
 func (m *MetaStore) GetNote(path string) (*NoteMeta, error) {
 	nm := &NoteMeta{}
 	err := m.db.QueryRow(
-		`SELECT path, title, folder, created, modified FROM notes WHERE path = ?`, path,
-	).Scan(&nm.Path, &nm.Title, &nm.Folder, &nm.Created, &nm.Modified)
+		`SELECT path, title, folder, created, modified, todo, done, due FROM notes WHERE path = ?`, path,
+	).Scan(&nm.Path, &nm.Title, &nm.Folder, &nm.Created, &nm.Modified, &nm.Todo, &nm.Done, &nm.Due)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrNoteNotFound
 	}
@@ -199,7 +248,7 @@ func (m *MetaStore) GetNote(path string) (*NoteMeta, error) {
 // ListByFolder returns all notes in the given folder, sorted by title.
 func (m *MetaStore) ListByFolder(folder string) ([]*NoteMeta, error) {
 	rows, err := m.db.Query(
-		`SELECT path, title, folder, created, modified FROM notes WHERE folder = ? ORDER BY title`, folder,
+		`SELECT path, title, folder, created, modified, todo, done, due FROM notes WHERE folder = ? ORDER BY title`, folder,
 	)
 	if err != nil {
 		return nil, err
@@ -211,7 +260,7 @@ func (m *MetaStore) ListByFolder(folder string) ([]*NoteMeta, error) {
 // ListByTag returns all notes that have the given tag, sorted by title.
 func (m *MetaStore) ListByTag(tag string) ([]*NoteMeta, error) {
 	rows, err := m.db.Query(
-		`SELECT n.path, n.title, n.folder, n.created, n.modified
+		`SELECT n.path, n.title, n.folder, n.created, n.modified, n.todo, n.done, n.due
 		 FROM notes n
 		 JOIN tags t ON n.path = t.note_path
 		 WHERE t.tag = ?
@@ -248,7 +297,7 @@ func (m *MetaStore) ListAllTags() ([]TagInfo, error) {
 // ListAll returns all notes sorted by path.
 func (m *MetaStore) ListAll() ([]*NoteMeta, error) {
 	rows, err := m.db.Query(
-		`SELECT path, title, folder, created, modified FROM notes ORDER BY path`,
+		`SELECT path, title, folder, created, modified, todo, done, due FROM notes ORDER BY path`,
 	)
 	if err != nil {
 		return nil, err
@@ -323,7 +372,7 @@ func (m *MetaStore) ListPinned() ([]string, error) {
 // ListRecent returns notes ordered by most recently modified.
 func (m *MetaStore) ListRecent(limit int) ([]*NoteMeta, error) {
 	rows, err := m.db.Query(
-		`SELECT path, title, folder, created, modified FROM notes ORDER BY modified DESC LIMIT ?`,
+		`SELECT path, title, folder, created, modified, todo, done, due FROM notes ORDER BY modified DESC LIMIT ?`,
 		limit,
 	)
 	if err != nil {
@@ -336,7 +385,7 @@ func (m *MetaStore) scanNotesWithTags(rows *sql.Rows) ([]*NoteMeta, error) {
 	var notes []*NoteMeta
 	for rows.Next() {
 		nm := &NoteMeta{}
-		if err := rows.Scan(&nm.Path, &nm.Title, &nm.Folder, &nm.Created, &nm.Modified); err != nil {
+		if err := rows.Scan(&nm.Path, &nm.Title, &nm.Folder, &nm.Created, &nm.Modified, &nm.Todo, &nm.Done, &nm.Due); err != nil {
 			return nil, err
 		}
 		notes = append(notes, nm)
@@ -353,4 +402,35 @@ func (m *MetaStore) scanNotesWithTags(rows *sql.Rows) ([]*NoteMeta, error) {
 		nm.Tags = tags
 	}
 	return notes, nil
+}
+
+// ListTodos returns all notes marked as todos, ordered by due date (nulls last), then title.
+func (m *MetaStore) ListTodos() ([]*NoteMeta, error) {
+	rows, err := m.db.Query(
+		`SELECT path, title, folder, created, modified, todo, done, due
+		 FROM notes
+		 WHERE todo = 1
+		 ORDER BY done ASC, due IS NULL, due ASC, title`,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	return m.scanNotesWithTags(rows)
+}
+
+// SetTodoDone sets the done status of a todo note.
+func (m *MetaStore) SetTodoDone(path string, done bool) error {
+	res, err := m.db.Exec(`UPDATE notes SET done = ? WHERE path = ? AND todo = 1`, done, path)
+	if err != nil {
+		return err
+	}
+	rows, err := res.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if rows == 0 {
+		return fmt.Errorf("note %q is not a todo or does not exist", path)
+	}
+	return nil
 }

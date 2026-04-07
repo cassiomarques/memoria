@@ -114,6 +114,7 @@ func run(homeDir string) error {
 
 	// Create NoteService
 	svc := service.New(files, meta, idx, repo, ed)
+	defer svc.Close()
 
 	// Initial sync: load notes from disk into metadata + search
 	if err := svc.Sync(); err != nil {
@@ -129,10 +130,11 @@ func run(homeDir string) error {
 
 	// Create app wired to service
 	app := tui.NewAppWithService(svc, tui.AppOptions{
-		ExpandFolders:   cfg.ResolveExpandFolders(),
-		ShowPinnedNotes: cfg.ResolveShowPinnedNotes(),
-		ShowTimestamps:  cfg.ResolveShowTimestamps(),
-		Version:         version,
+		ExpandFolders:     cfg.ResolveExpandFolders(),
+		ShowPinnedNotes:   cfg.ResolveShowPinnedNotes(),
+		ShowTimestamps:    cfg.ResolveShowTimestamps(),
+		Version:           version,
+		DefaultTodoFolder: cfg.ResolveDefaultTodoFolder(),
 	})
 
 	// Run Bubble Tea program

@@ -14,12 +14,14 @@ import (
 
 // Config holds the application configuration.
 type Config struct {
-	NotesDir        string `yaml:"notes_dir"`
-	GitRemote       string `yaml:"git_remote,omitempty"`
-	Editor          string `yaml:"editor,omitempty"`
-	ExpandFolders   *bool  `yaml:"expand_folders,omitempty"`
-	ShowPinnedNotes *bool  `yaml:"show_pinned_notes,omitempty"`
-	ShowTimestamps  *bool  `yaml:"show_timestamps,omitempty"`
+	NotesDir          string  `yaml:"notes_dir"`
+	GitRemote         string  `yaml:"git_remote,omitempty"`
+	Editor            string  `yaml:"editor,omitempty"`
+	ExpandFolders     *bool   `yaml:"expand_folders,omitempty"`
+	ShowPinnedNotes   *bool   `yaml:"show_pinned_notes,omitempty"`
+	ShowTimestamps    *bool   `yaml:"show_timestamps,omitempty"`
+	DefaultTodoFolder *string `yaml:"default_todo_folder,omitempty"`
+	TodosEnabled      *bool   `yaml:"todos_enabled,omitempty"`
 }
 
 // DefaultConfig returns a Config with sensible defaults.
@@ -91,6 +93,24 @@ func (c *Config) ResolveShowTimestamps() bool {
 		return true
 	}
 	return *c.ShowTimestamps
+}
+
+// ResolveDefaultTodoFolder returns the folder for new todos.
+// Defaults to "TODO" if not set.
+func (c *Config) ResolveDefaultTodoFolder() string {
+	if c.DefaultTodoFolder == nil {
+		return "TODO"
+	}
+	return *c.DefaultTodoFolder
+}
+
+// ResolveTodosEnabled returns whether the todo feature is enabled.
+// Defaults to true if not set.
+func (c *Config) ResolveTodosEnabled() bool {
+	if c.TodosEnabled == nil {
+		return true
+	}
+	return *c.TodosEnabled
 }
 
 // ResolveEditor returns the editor to use, checking in order:

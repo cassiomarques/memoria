@@ -16,7 +16,7 @@ type Command struct {
 
 // commandNames is the list of all recognized command names.
 var commandNames = []string{
-	"new", "open", "search", "recent", "all", "tag", "untag", "ls", "cd", "mv", "rm", "tags", "sync", "remote", "fixfm", "help", "quit", "q",
+	"new", "open", "search", "recent", "all", "tag", "untag", "ls", "cd", "mv", "rm", "tags", "todo", "todos", "sync", "remote", "fixfm", "help", "quit", "q",
 }
 
 // ParseCommand parses raw command-bar input into a Command.
@@ -84,6 +84,8 @@ func Completions(input string, noteItems []components.NoteItem, tagList []string
 		return completeFolders(argPart, noteItems)
 	case "new":
 		return completeFolders(argPart, noteItems)
+	case "todo":
+		return completeTodoCommand(argPart, noteItems)
 	default:
 		return nil
 	}
@@ -272,4 +274,23 @@ func completeTags(prefix string, tagList []string) []string {
 		}
 	}
 	return matches
+}
+
+// completeTodoCommand suggests folder completions after --folder in the :todo command.
+func completeTodoCommand(argPart string, noteItems []components.NoteItem) []string {
+	// Check if the last argument is --folder followed by a prefix
+	parts := strings.Fields(argPart)
+	for i, p := range parts {
+		if p == "--folder" && i+1 < len(parts) {
+			return completeFolders(parts[i+1], noteItems)
+		}
+		if p == "--folder" && i+1 == len(parts) {
+			return completeFolders("", noteItems)
+		}
+	}
+	// If argPart ends with "--folder " (with trailing space)
+	if strings.HasSuffix(argPart, "--folder ") {
+		return completeFolders("", noteItems)
+	}
+	return nil
 }

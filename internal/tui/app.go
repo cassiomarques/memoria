@@ -52,6 +52,12 @@ type clearMessageMsg struct{}
 // refreshTickMsg triggers a periodic re-render so relative timestamps stay fresh.
 type refreshTickMsg struct{}
 
+// gitSyncMsg is sent when the background git sync worker completes a commit+push.
+// A nil Err means the push succeeded; non-nil means it failed (data is safe locally).
+type gitSyncMsg struct {
+	Err error
+}
+
 // App is the root Bubble Tea model that composes all TUI components.
 type App struct {
 	noteList   components.NoteList
@@ -88,7 +94,8 @@ type App struct {
 	filterState filterState
 	filterBuf   string // current filter text
 
-	version string
+	version           string
+	defaultTodoFolder string
 }
 
 // NewApp creates a new App with all sub-components initialized (no service).
@@ -105,10 +112,11 @@ func NewApp() App {
 
 // AppOptions holds optional configuration for the TUI app.
 type AppOptions struct {
-	ExpandFolders   bool
-	ShowPinnedNotes bool
-	ShowTimestamps  bool
-	Version         string
+	ExpandFolders     bool
+	ShowPinnedNotes   bool
+	ShowTimestamps    bool
+	Version           string
+	DefaultTodoFolder string
 }
 
 // NewAppWithService creates an App wired to the NoteService, loading initial data.
@@ -117,16 +125,18 @@ func NewAppWithService(svc *service.NoteService, opts AppOptions) App {
 	noteList.SetExpandAll(opts.ExpandFolders)
 	noteList.SetShowPinned(opts.ShowPinnedNotes)
 	noteList.SetShowModified(opts.ShowTimestamps)
+	noteList.SetTodoFolder(opts.DefaultTodoFolder)
 
 	a := App{
-		noteList:    noteList,
-		commandBar:  components.NewCommandBar(),
-		statusBar:   components.NewStatusBar(),
-		preview:     components.NewPreview(),
-		focusedPane: focusList,
-		styles:      theme.DefaultStyles(),
-		svc:         svc,
-		version:     opts.Version,
+		noteList:          noteList,
+		commandBar:        components.NewCommandBar(),
+		statusBar:         components.NewStatusBar(),
+		preview:           components.NewPreview(),
+		focusedPane:       focusList,
+		styles:            theme.DefaultStyles(),
+		svc:               svc,
+		version:           opts.Version,
+		defaultTodoFolder: opts.DefaultTodoFolder,
 	}
 
 	_ = a.refreshNoteList()
@@ -136,7 +146,13 @@ func NewAppWithService(svc *service.NoteService, opts AppOptions) App {
 	return a
 }
 
-func (a App) Init() tea.Cmd { return refreshTickCmd() }
+func (a App) Init() tea.Cmd {
+	cmds := []tea.Cmd{refreshTickCmd()}
+	if a.svc != nil {
+		cmds = append(cmds, waitForSyncCmd(a.svc.SyncResults()))
+	}
+	return tea.Batch(cmds...)
+}
 
 func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmds []tea.Cmd
@@ -185,6 +201,21 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// No state change needed — returning triggers View() which recalculates
 		// relative timestamps. Schedule the next tick.
 		return a, refreshTickCmd()
+
+	case gitSyncMsg:
+		// The background git worker finished a commit+push cycle.
+		// Re-subscribe for the next result, and update the sync indicator.
+		var nextCmd tea.Cmd
+		if a.svc != nil {
+			nextCmd = waitForSyncCmd(a.svc.SyncResults())
+		}
+		if msg.Err != nil {
+			a.statusBar.SetSynced(false)
+			a.setMessage("Sync failed: "+msg.Err.Error(), true)
+			return a, tea.Batch(nextCmd, clearMessageCmd())
+		}
+		a.statusBar.SetSynced(true)
+		return a, nextCmd
 
 	case tea.KeyPressMsg:
 		key := msg.String()
@@ -352,6 +383,9 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			case "b":
 				a.togglePin()
 				return a, nil
+			case "x":
+				a.toggleTodoDone()
+				return a, clearMessageCmd()
 			case "t":
 				show := a.noteList.ToggleShowModified()
 				if show {
@@ -574,6 +608,33 @@ func (a *App) togglePin() {
 	}
 }
 
+// toggleTodoDone flips the done status of the currently selected todo note.
+func (a *App) toggleTodoDone() {
+	if a.svc == nil {
+		return
+	}
+	sel := a.noteList.SelectedItem()
+	if sel == nil {
+		a.setMessage("Select a note first", false)
+		return
+	}
+	if !sel.Todo {
+		a.setMessage("Not a todo", false)
+		return
+	}
+	nowDone, err := a.svc.ToggleTodoDone(sel.Path)
+	if err != nil {
+		a.setMessage("Error: "+err.Error(), true)
+		return
+	}
+	_ = a.refreshNoteList()
+	if nowDone {
+		a.setMessage("✅ Done: "+sel.Title, false)
+	} else {
+		a.setMessage("⭕ Reopened: "+sel.Title, false)
+	}
+}
+
 // copyPreviewToClipboard copies the raw markdown of the previewed note to the system clipboard.
 func (a *App) copyPreviewToClipboard() {
 	content := a.preview.Content()
@@ -663,6 +724,17 @@ func refreshTickCmd() tea.Cmd {
 	})
 }
 
+// waitForSyncCmd returns a tea.Cmd that blocks until the next git sync result
+// arrives, then delivers it as a gitSyncMsg. This is how Bubble Tea's Elm
+// Architecture handles async I/O: the Cmd runs in a separate goroutine (managed
+// by the runtime), keeping Update() non-blocking. When the channel read
+// completes, the runtime feeds the resulting Msg back into Update().
+func waitForSyncCmd(ch <-chan error) tea.Cmd {
+	return func() tea.Msg {
+		return gitSyncMsg{Err: <-ch}
+	}
+}
+
 // refreshNoteList reloads notes from the service.
 func (a *App) refreshNoteList() error {
 	if a.svc == nil {
@@ -683,6 +755,9 @@ func (a *App) refreshNoteList() error {
 				Folder:   n.Folder,
 				Tags:     n.Tags,
 				Modified: n.Modified,
+				Todo:     n.Todo,
+				Done:     n.Done,
+				Due:      n.Due,
 			})
 		}
 	} else {
@@ -697,6 +772,9 @@ func (a *App) refreshNoteList() error {
 				Folder:   n.Folder,
 				Tags:     n.Tags,
 				Modified: n.Modified,
+				Todo:     n.Todo,
+				Done:     n.Done,
+				Due:      n.Due,
 			})
 		}
 	}
@@ -789,6 +867,10 @@ func (a *App) executeCommand(cmd *Command) tea.Cmd {
 		return a.cmdRm(cmd.Args)
 	case "tags":
 		return a.cmdTags()
+	case "todo":
+		return a.cmdTodo(cmd.Args)
+	case "todos":
+		return a.cmdTodos()
 	case "sync":
 		return a.cmdSync()
 	case "remote":
@@ -834,6 +916,76 @@ func (a *App) cmdNew(args []string) tea.Cmd {
 	return a.openInEditor(path, 0)
 }
 
+// cmdTodo creates a new todo note.
+// Syntax: :todo <title words> [#tag1 #tag2] [@due(YYYY-MM-DD)] [--folder <path>]
+func (a *App) cmdTodo(args []string) tea.Cmd {
+	if len(args) == 0 {
+		a.setMessage("Usage: todo <title> [#tag] [@due(YYYY-MM-DD)] [--folder <path>]", true)
+		return nil
+	}
+
+	if a.svc == nil {
+		a.setMessage("No service configured", true)
+		return nil
+	}
+
+	var titleWords []string
+	var tags []string
+	var dueDate *time.Time
+	folder := a.defaultTodoFolder
+	if folder == "" {
+		folder = "TODO"
+	}
+
+	for i := 0; i < len(args); i++ {
+		arg := args[i]
+		switch {
+		case arg == "--folder" && i+1 < len(args):
+			i++
+			folder = args[i]
+		case strings.HasPrefix(arg, "#"):
+			tag := strings.TrimPrefix(arg, "#")
+			if tag != "" {
+				tags = append(tags, tag)
+			}
+		case strings.HasPrefix(arg, "@due(") && strings.HasSuffix(arg, ")"):
+			dateStr := arg[5 : len(arg)-1] // strip @due( and )
+			t, err := time.Parse(time.DateOnly, dateStr)
+			if err != nil {
+				a.setMessage("Invalid due date (use YYYY-MM-DD): "+dateStr, true)
+				return nil
+			}
+			dueDate = &t
+		default:
+			titleWords = append(titleWords, arg)
+		}
+	}
+
+	title := strings.Join(titleWords, " ")
+	if title == "" {
+		a.setMessage("Todo title cannot be empty", true)
+		return nil
+	}
+
+	opts := service.CreateTodoOptions{
+		Title:  title,
+		Folder: folder,
+		Tags:   tags,
+		Due:    dueDate,
+	}
+
+	_, err := a.svc.CreateTodo(opts)
+	if err != nil {
+		a.setMessage("Create todo failed: "+err.Error(), true)
+		return nil
+	}
+
+	_ = a.refreshNoteList()
+	a.refreshTags()
+	a.setMessage("⭕ Created todo: "+title, false)
+	return clearMessageCmd()
+}
+
 func (a *App) cmdOpen(args []string) tea.Cmd {
 	if len(args) == 0 {
 		a.setMessage("Usage: open <path>", true)
@@ -875,6 +1027,9 @@ func (a *App) cmdSearch(args []string) tea.Cmd {
 			Folder:   n.Folder,
 			Tags:     n.Tags,
 			Modified: n.Modified,
+			Todo:     n.Todo,
+			Done:     n.Done,
+			Due:      n.Due,
 		})
 	}
 
@@ -911,6 +1066,9 @@ func (a *App) cmdRecent(args []string) tea.Cmd {
 			Folder:   nm.Folder,
 			Tags:     nm.Tags,
 			Modified: nm.Modified,
+			Todo:     nm.Todo,
+			Done:     nm.Done,
+			Due:      nm.Due,
 		})
 	}
 
@@ -1001,6 +1159,7 @@ func (a *App) cmdLs(args []string) tea.Cmd {
 			items = append(items, components.NoteItem{
 				Path: n.Path, Title: n.Title, Folder: n.Folder,
 				Tags: n.Tags, Modified: n.Modified,
+				Todo: n.Todo, Done: n.Done, Due: n.Due,
 			})
 		}
 	} else {
@@ -1013,6 +1172,7 @@ func (a *App) cmdLs(args []string) tea.Cmd {
 			items = append(items, components.NoteItem{
 				Path: n.Path, Title: n.Title, Folder: n.Folder,
 				Tags: n.Tags, Modified: n.Modified,
+				Todo: n.Todo, Done: n.Done, Due: n.Due,
 			})
 		}
 	}
@@ -1122,6 +1282,71 @@ func (a *App) cmdTags() tea.Cmd {
 	return nil
 }
 
+func (a *App) cmdTodos() tea.Cmd {
+	if a.svc == nil {
+		a.setMessage("No service configured", true)
+		return nil
+	}
+
+	todos, err := a.svc.ListTodos()
+	if err != nil {
+		a.setMessage("Todos failed: "+err.Error(), true)
+		return nil
+	}
+
+	if len(todos) == 0 {
+		a.setMessage("No todos found", false)
+		return nil
+	}
+
+	var lines []string
+	lines = append(lines, "# Todos\n")
+
+	var pending, done int
+	for _, t := range todos {
+		icon := "⭕"
+		if t.Done {
+			icon = "✅"
+			done++
+		} else {
+			pending++
+		}
+		dueStr := ""
+		if t.Due != nil {
+			dueStr = " — due " + t.Due.Format(time.DateOnly)
+			if !t.Done {
+				y1, m1, d1 := time.Now().Date()
+				y2, m2, d2 := t.Due.Date()
+				today := time.Date(y1, m1, d1, 0, 0, 0, 0, time.Local)
+				dueDate := time.Date(y2, m2, d2, 0, 0, 0, 0, time.Local)
+				if dueDate.Before(today) {
+					dueStr += " ⚠️ **OVERDUE**"
+				} else if y1 == y2 && m1 == m2 && d1 == d2 {
+					dueStr += " ⏰ **TODAY**"
+				}
+			}
+		}
+		tagStr := ""
+		if len(t.Tags) > 0 {
+			tagStr = " `" + strings.Join(t.Tags, "` `") + "`"
+		}
+		title := strings.TrimSuffix(t.Title, ".md")
+		lines = append(lines, fmt.Sprintf("- %s **%s**%s%s", icon, title, dueStr, tagStr))
+	}
+
+	lines = append(lines, fmt.Sprintf("\n*%d pending, %d done*", pending, done))
+	a.preview.SetContent("Todos", strings.Join(lines, "\n"))
+	a.previewedPath = ""
+	a.customPreview = true
+	if !a.preview.Visible() {
+		a.preview.Toggle()
+		a.resizeComponents()
+	}
+
+	a.setMessage(fmt.Sprintf("%d todos (%d pending)", len(todos), pending), false)
+	return nil
+}
+
 func (a *App) cmdSync() tea.Cmd {
 	if a.svc == nil {
 		a.setMessage("No service configured", true)
@@ -1213,6 +1438,8 @@ func (a *App) cmdHelp() {
 | **mv** *old* *new* | Move/rename a note |
 | **rm** *path* | Delete a note |
 | **tags** | Show all tags |
+| **todo** *title* [#tag] [@due(YYYY-MM-DD)] [--folder *path*] | Create a todo note |
+| **todos** | Show all todos sorted by due date |
 | **sync** | Sync with git remote |
 | **remote** *url* | Set git remote and pull notes |
 | **fixfm** | Add frontmatter to notes missing it |
@@ -1232,6 +1459,7 @@ func (a *App) cmdHelp() {
 | **d** | Delete selected note or folder |
 | **n** | Create a new note (in focused folder) |
 | **b** | Toggle bookmark on selected note |
+| **x** | Toggle todo done/undone |
 | **j/k** | Navigate list |
 | **h/l, ←/→** | Collapse/expand folder |
 | **H/L** | Collapse/expand all folders |
@@ -1381,6 +1609,9 @@ func (a *App) applyFilter() {
 					Folder:   n.Folder,
 					Tags:     n.Tags,
 					Modified: n.Modified,
+					Todo:     n.Todo,
+					Done:     n.Done,
+					Due:      n.Due,
 				})
 			}
 		}

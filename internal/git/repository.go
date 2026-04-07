@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sync"
 	"time"
 
 	gogit "github.com/go-git/go-git/v5"
@@ -22,6 +23,7 @@ var (
 type Repository struct {
 	path string
 	repo *gogit.Repository
+	mu   sync.Mutex // serializes all git operations (go-git is not thread-safe)
 }
 
 // InitOrOpen opens an existing git repository at path, or initializes a new one.
@@ -47,6 +49,8 @@ func InitOrOpen(path string) (*Repository, error) {
 
 // HasChanges reports whether the worktree has any uncommitted changes.
 func (r *Repository) HasChanges() (bool, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
 	wt, err := r.repo.Worktree()
 	if err != nil {
 		return false, fmt.Errorf("worktree: %w", err)
@@ -63,6 +67,8 @@ func (r *Repository) HasChanges() (bool, error) {
 // CommitAll stages all changes and commits with the given message.
 // If there are no changes, it returns nil (no-op).
 func (r *Repository) CommitAll(message string) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
 	wt, err := r.repo.Worktree()
 	if err != nil {
 		return fmt.Errorf("worktree: %w", err)
@@ -125,6 +131,8 @@ func (r *Repository) SetRemote(name string, url string) error {
 // This is the most reliable way to set up a repo from an existing remote.
 // It preserves any non-.git files that don't conflict with the clone.
 func (r *Repository) CloneFrom(url string) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
 	// Clone into a temp directory first
 	tmpDir, err := os.MkdirTemp(filepath.Dir(r.path), ".memoria-clone-*")
 	if err != nil {
@@ -187,6 +195,8 @@ func (r *Repository) HasRemote(name string) bool {
 
 // Push pushes to the named remote.
 func (r *Repository) Push(remoteName string) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
 	if !r.HasRemote(remoteName) {
 		return fmt.Errorf("remote %q: %w", remoteName, ErrNoRemote)
 	}
@@ -205,6 +215,8 @@ func (r *Repository) Push(remoteName string) error {
 
 // Pull fetches and merges from the named remote.
 func (r *Repository) Pull(remoteName string) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
 	if !r.HasRemote(remoteName) {
 		return fmt.Errorf("remote %q: %w", remoteName, ErrNoRemote)
 	}

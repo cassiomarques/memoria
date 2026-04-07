@@ -13,6 +13,31 @@ type Frontmatter struct {
 	Tags     []string  `yaml:"tags,omitempty"`
 	Created  time.Time `yaml:"created"`
 	Modified time.Time `yaml:"modified"`
+	Todo     bool      `yaml:"todo,omitempty"`
+	Done     bool      `yaml:"done,omitempty"`
+	Due      *DateOnly `yaml:"due,omitempty"`
+}
+
+// DateOnly is a date-only time value that serializes as YYYY-MM-DD in YAML.
+type DateOnly time.Time
+
+func (d DateOnly) Time() time.Time { return time.Time(d) }
+
+func (d DateOnly) MarshalYAML() (any, error) {
+	return time.Time(d).Format(time.DateOnly), nil
+}
+
+func (d *DateOnly) UnmarshalYAML(value *yaml.Node) error {
+	t, err := time.Parse(time.DateOnly, value.Value)
+	if err != nil {
+		// Fall back to RFC3339
+		t, err = time.Parse(time.RFC3339, value.Value)
+		if err != nil {
+			return fmt.Errorf("invalid date %q: expected YYYY-MM-DD", value.Value)
+		}
+	}
+	*d = DateOnly(t)
+	return nil
 }
 
 // ParseFrontmatter parses a raw string that may contain YAML frontmatter delimited
@@ -67,6 +92,14 @@ func (f *Frontmatter) Serialize() (string, error) {
 	data["created"] = f.Created.Format(time.RFC3339)
 	data["modified"] = f.Modified.Format(time.RFC3339)
 
+	if f.Todo {
+		data["todo"] = true
+		data["done"] = f.Done
+	}
+	if f.Due != nil {
+		data["due"] = f.Due.Time().Format(time.DateOnly)
+	}
+
 	out, err := yaml.Marshal(data)
 	if err != nil {
 		return "", fmt.Errorf("failed to serialize frontmatter: %w", err)
@@ -109,6 +142,12 @@ func ParseNote(path string, raw string) (*Note, error) {
 		}
 		if !fm.Modified.IsZero() {
 			n.Modified = fm.Modified
+		}
+		n.Todo = fm.Todo
+		n.Done = fm.Done
+		if fm.Due != nil {
+			t := fm.Due.Time()
+			n.Due = &t
 		}
 	}
 

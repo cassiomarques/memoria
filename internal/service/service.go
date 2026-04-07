@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/cassiomarques/memoria/internal/editor"
 	"github.com/cassiomarques/memoria/internal/git"
@@ -21,6 +22,13 @@ type NoteService struct {
 	search *search.SearchIndex
 	repo   *git.Repository
 	editor *editor.Editor
+
+	// commitReqs feeds commit messages to the background git worker.
+	commitReqs chan string
+	// syncResults delivers push outcomes back to the TUI layer.
+	syncResults chan error
+	// done signals the git worker to stop on shutdown.
+	done chan struct{}
 }
 
 // New creates a NoteService wired to the given subsystems.
@@ -32,12 +40,127 @@ func New(
 	repo *git.Repository,
 	ed *editor.Editor,
 ) *NoteService {
-	return &NoteService{
-		files:  files,
-		meta:   meta,
-		search: idx,
-		repo:   repo,
-		editor: ed,
+	s := &NoteService{
+		files:       files,
+		meta:        meta,
+		search:      idx,
+		repo:        repo,
+		editor:      ed,
+		commitReqs:  make(chan string, 64),
+		syncResults: make(chan error, 64),
+		done:        make(chan struct{}),
+	}
+	go s.gitWorker()
+	return s
+}
+
+// gitWorker is a background goroutine that handles all git operations.
+// It commits each change immediately (preserving descriptive history) and
+// debounces pushes: after committing, it waits for a quiet period before
+// pushing. Rapid actions produce individual commits but a single push.
+//
+//	toggle done → commit "toggle done TODO/task.md"     ← immediate
+//	delete note → commit "delete work/old.md"           ← immediate
+//	create todo → commit "create todo TODO/foo.md"      ← immediate
+//	... 2s of quiet ...
+//	push to origin                                       ← one push
+func (s *NoteService) gitWorker() {
+	defer close(s.syncResults)
+
+	const pushDelay = 2 * time.Second
+	var timer *time.Timer
+	pendingPush := false
+
+	for {
+		select {
+		case <-s.done:
+			if timer != nil {
+				timer.Stop()
+			}
+			// Commit+push any remaining queued work before exiting.
+			s.drainCommits()
+			if pendingPush {
+				_ = s.pushIfRemote()
+			}
+			return
+
+		case msg := <-s.commitReqs:
+			if s.repo == nil {
+				continue
+			}
+			if err := s.repo.CommitAll(msg); err != nil {
+				s.syncResults <- fmt.Errorf("git commit: %w", err)
+				continue
+			}
+			pendingPush = true
+			// Reset the push debounce timer.
+			if timer != nil {
+				timer.Stop()
+			}
+			timer = time.NewTimer(pushDelay)
+
+		case <-timerChan(timer):
+			// Quiet period elapsed — push now.
+			timer = nil
+			if pendingPush {
+				s.syncResults <- s.pushIfRemote()
+				pendingPush = false
+			}
+		}
+	}
+}
+
+// drainCommits processes any remaining commit requests in the buffer.
+func (s *NoteService) drainCommits() {
+	for {
+		select {
+		case msg := <-s.commitReqs:
+			if s.repo != nil {
+				_ = s.repo.CommitAll(msg)
+			}
+		default:
+			return
+		}
+	}
+}
+
+// timerChan returns the channel for a timer, or a nil channel (blocks forever)
+// if the timer is nil.
+func timerChan(t *time.Timer) <-chan time.Time {
+	if t == nil {
+		return nil
+	}
+	return t.C
+}
+
+// pushIfRemote pushes to "origin" if a remote is configured.
+func (s *NoteService) pushIfRemote() error {
+	if s.repo == nil || !s.repo.HasRemote("origin") {
+		return nil
+	}
+	return s.repo.Push("origin")
+}
+
+// SyncResults returns a channel that delivers git push outcomes.
+func (s *NoteService) SyncResults() <-chan error {
+	return s.syncResults
+}
+
+// requestSync enqueues a git commit message to the background worker.
+// The commit and push happen entirely in the background — the caller
+// returns immediately so the UI stays responsive.
+func (s *NoteService) requestSync(message string) {
+	select {
+	case s.commitReqs <- message:
+	default:
+	}
+}
+
+// Close shuts down the background git worker. Pending commits are
+// flushed and a best-effort push is attempted before returning.
+func (s *NoteService) Close() {
+	close(s.done)
+	for range s.syncResults {
 	}
 }
 
@@ -72,11 +195,7 @@ func (s *NoteService) Create(path string, content string, tags []string) (*note.
 		}
 	}
 
-	if s.repo != nil {
-		if err := s.repo.CommitAndPush("create " + path); err != nil {
-			return nil, fmt.Errorf("git commit: %w", err)
-		}
-	}
+	s.requestSync("create " + path)
 
 	return n, nil
 }
@@ -122,13 +241,6 @@ func (s *NoteService) Open(path string) (*note.Note, error) {
 func (s *NoteService) AfterEdit(path string) (bool, error) {
 	path = ensureMD(path)
 
-	absPath := s.files.AbsPath(path)
-	changed, err := editor.HasChanged("", absPath)
-	if err != nil {
-		// If we can't determine the hash, reload anyway
-		changed = true
-	}
-
 	// We always reload — the caller is responsible for checking the hash
 	// before and after editing. We detect changes via git.
 	n, err := s.files.Load(path)
@@ -152,21 +264,9 @@ func (s *NoteService) AfterEdit(path string) (bool, error) {
 		}
 	}
 
-	if s.repo != nil {
-		hasChanges, err := s.repo.HasChanges()
-		if err != nil {
-			return false, fmt.Errorf("checking git changes: %w", err)
-		}
-		if hasChanges {
-			if err := s.repo.CommitAndPush("edit " + path); err != nil {
-				return false, fmt.Errorf("git commit: %w", err)
-			}
-			return true, nil
-		}
-	}
+	s.requestSync("edit " + path)
 
-	_ = changed
-	return false, nil
+	return true, nil
 }
 
 // Delete removes a note from all stores.
@@ -187,11 +287,7 @@ func (s *NoteService) Delete(path string) error {
 		}
 	}
 
-	if s.repo != nil {
-		if err := s.repo.CommitAndPush("delete " + path); err != nil {
-			return fmt.Errorf("git commit: %w", err)
-		}
-	}
+	s.requestSync("delete " + path)
 
 	return nil
 }
@@ -219,10 +315,8 @@ func (s *NoteService) DeleteFolder(folder string) (int, error) {
 		}
 	}
 
-	if deleted > 0 && s.repo != nil {
-		if err := s.repo.CommitAndPush(fmt.Sprintf("delete folder %s (%d notes)", folder, deleted)); err != nil {
-			return deleted, fmt.Errorf("git commit: %w", err)
-		}
+	if deleted > 0 {
+		s.requestSync(fmt.Sprintf("delete folder %s (%d notes)", folder, deleted))
 	}
 
 	return deleted, nil
@@ -287,11 +381,7 @@ func (s *NoteService) Move(oldPath, newPath string) error {
 		}
 	}
 
-	if s.repo != nil {
-		if err := s.repo.CommitAndPush("move " + oldPath + " → " + newPath); err != nil {
-			return fmt.Errorf("git commit: %w", err)
-		}
-	}
+	s.requestSync("move " + oldPath + " → " + newPath)
 
 	return nil
 }
@@ -340,11 +430,7 @@ func (s *NoteService) moveFolder(oldFolder, newFolder string) error {
 		}
 	}
 
-	if s.repo != nil {
-		if err := s.repo.CommitAndPush("rename folder " + oldFolder + " → " + newFolder); err != nil {
-			return fmt.Errorf("git commit: %w", err)
-		}
-	}
+	s.requestSync("rename folder " + oldFolder + " → " + newFolder)
 
 	return nil
 }
@@ -408,11 +494,7 @@ func (s *NoteService) AddTags(path string, tags []string) (*note.Note, error) {
 		}
 	}
 
-	if s.repo != nil {
-		if err := s.repo.CommitAndPush("add tags to " + path); err != nil {
-			return nil, fmt.Errorf("git commit: %w", err)
-		}
-	}
+	s.requestSync("add tags to " + path)
 
 	return n, nil
 }
@@ -444,11 +526,7 @@ func (s *NoteService) RemoveTags(path string, tags []string) (*note.Note, error)
 		}
 	}
 
-	if s.repo != nil {
-		if err := s.repo.CommitAndPush("remove tags from " + path); err != nil {
-			return nil, fmt.Errorf("git commit: %w", err)
-		}
-	}
+	s.requestSync("remove tags from " + path)
 
 	return n, nil
 }
@@ -623,11 +701,88 @@ func (s *NoteService) EnsureFrontmatter() (int, error) {
 		return fixed, err
 	}
 
-	if fixed > 0 && s.repo != nil {
-		if err := s.repo.CommitAndPush(fmt.Sprintf("add frontmatter to %d notes", fixed)); err != nil {
-			return fixed, fmt.Errorf("git commit: %w", err)
-		}
+	if fixed > 0 {
+		s.requestSync(fmt.Sprintf("add frontmatter to %d notes", fixed))
 	}
 
 	return fixed, nil
+}
+
+// CreateTodoOptions holds the parameters for creating a todo note.
+type CreateTodoOptions struct {
+	Title  string
+	Folder string
+	Tags   []string
+	Due    *time.Time
+}
+
+// CreateTodo creates a new todo note with the given options.
+// The title is slugified to form the filename, placed in the given folder.
+func (s *NoteService) CreateTodo(opts CreateTodoOptions) (*note.Note, error) {
+	slug := note.Slugify(opts.Title)
+	if slug == "" {
+		return nil, fmt.Errorf("todo title cannot be empty")
+	}
+
+	path := filepath.Join(opts.Folder, slug+".md")
+
+	n, err := note.NewNote(path, "", opts.Tags)
+	if err != nil {
+		return nil, fmt.Errorf("creating todo: %w", err)
+	}
+	n.Todo = true
+	n.Done = false
+	n.Due = opts.Due
+
+	if err := s.files.Save(n); err != nil {
+		return nil, fmt.Errorf("saving todo to disk: %w", err)
+	}
+
+	if err := s.meta.UpsertNote(n); err != nil {
+		return nil, fmt.Errorf("upserting todo metadata: %w", err)
+	}
+
+	if s.search != nil {
+		if err := s.search.Index(n); err != nil {
+			return nil, fmt.Errorf("indexing todo: %w", err)
+		}
+	}
+
+	s.requestSync("create todo " + path)
+
+	return n, nil
+}
+
+// ToggleTodoDone flips the done status of a todo note and persists the change.
+func (s *NoteService) ToggleTodoDone(path string) (bool, error) {
+	n, err := s.files.Load(path)
+	if err != nil {
+		return false, fmt.Errorf("loading note: %w", err)
+	}
+	if !n.Todo {
+		return false, fmt.Errorf("%q is not a todo", path)
+	}
+
+	n.Done = !n.Done
+	n.Modified = time.Now()
+
+	if err := s.files.Save(n); err != nil {
+		return false, fmt.Errorf("saving note: %w", err)
+	}
+	if err := s.meta.UpsertNote(n); err != nil {
+		return false, fmt.Errorf("upserting metadata: %w", err)
+	}
+	if s.search != nil {
+		if err := s.search.Index(n); err != nil {
+			return false, fmt.Errorf("indexing note: %w", err)
+		}
+	}
+	s.requestSync("toggle done " + path)
+
+	return n.Done, nil
+}
+
+// ListTodos returns all todo notes from the metadata store, sorted by due date.
+func (s *NoteService) ListTodos() ([]*storage.NoteMeta, error) {
+	return s.meta.ListTodos()
 }

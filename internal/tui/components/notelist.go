@@ -20,6 +20,9 @@ type NoteItem struct {
 	Tags     []string
 	Modified time.Time
 	Pinned   bool
+	Todo     bool
+	Done     bool
+	Due      *time.Time
 }
 
 // treeNode represents a node in the folder tree (either a folder or a note).
@@ -55,9 +58,10 @@ type NoteList struct {
 	height       int
 	width        int
 	styles       theme.Styles
-	expandAll    bool // whether all folders start expanded
-	showPinned   bool // whether to show virtual "Pinned" section at top
-	showModified bool // whether to show modification timestamps
+	expandAll    bool   // whether all folders start expanded
+	showPinned   bool   // whether to show virtual "Pinned" section at top
+	showModified bool   // whether to show modification timestamps
+	todoFolder   string // folder name that sorts to top (e.g. "TODO")
 	filterText   string
 
 	// gg detection: true after first 'g' press
@@ -94,6 +98,11 @@ func (n *NoteList) SetShowModified(v bool) {
 	n.showModified = v
 }
 
+// SetTodoFolder sets the folder name that sorts to the top of the tree (e.g. "TODO").
+func (n *NoteList) SetTodoFolder(folder string) {
+	n.todoFolder = folder
+}
+
 func (n *NoteList) SetItems(items []NoteItem) {
 	// Remember current selection to restore after rebuild
 	var selectedPath string
@@ -102,7 +111,7 @@ func (n *NoteList) SetItems(items []NoteItem) {
 	}
 
 	n.items = items
-	n.tree = buildTree(n.items, n.expandAll, n.showPinned)
+	n.tree = buildTree(n.items, n.expandAll, n.showPinned, n.todoFolder)
 	n.flatVisible = nil
 	n.rebuildFlatVisible()
 	n.cursor = 0
@@ -505,13 +514,30 @@ func (n NoteList) renderNode(visibleIndex int) string {
 		displayTitle = "📌 " + displayTitle
 	}
 
+	// Todo prefix: ✅ for done, ⭕ for open
+	todoPrefix := ""
+	if node.noteItem != nil && node.noteItem.Todo {
+		if node.noteItem.Done {
+			todoPrefix = "✅ "
+		} else {
+			todoPrefix = "⭕ "
+		}
+		displayTitle = todoPrefix + displayTitle
+	}
+
+	// Build optional due date suffix for todos
+	dueSuffix := ""
+	if node.noteItem != nil && node.noteItem.Todo && node.noteItem.Due != nil && !node.noteItem.Done {
+		dueSuffix = " @" + node.noteItem.Due.Format(time.DateOnly)
+	}
+
 	// Build optional timestamp suffix
 	timeSuffix := ""
 	if n.showModified && node.noteItem != nil && !node.noteItem.Modified.IsZero() {
 		timeSuffix = " " + formatRelativeTime(node.noteItem.Modified)
 	}
 
-	overhead := 4 + 2*node.depth + len(timeSuffix)
+	overhead := 4 + 2*node.depth + len(timeSuffix) + len(dueSuffix)
 	if node.depth > 0 {
 		overhead += 4 // tree connector
 	}
@@ -528,6 +554,27 @@ func (n NoteList) renderNode(visibleIndex int) string {
 		titleStyle = n.styles.NoteItemSel
 	}
 
+	// Color coding for todo status
+	if node.noteItem != nil && node.noteItem.Todo && !selected {
+		switch {
+		case node.noteItem.Done:
+			titleStyle = titleStyle.Foreground(theme.ColorOverlay1)
+		case node.noteItem.Due != nil && isOverdue(*node.noteItem.Due):
+			titleStyle = titleStyle.Foreground(theme.ColorRed)
+		case node.noteItem.Due != nil && isDueToday(*node.noteItem.Due):
+			titleStyle = titleStyle.Foreground(theme.ColorYellow)
+		}
+	}
+
+	dueStyle := lipgloss.NewStyle().Foreground(theme.ColorOverlay1)
+	if node.noteItem != nil && node.noteItem.Due != nil && !node.noteItem.Done {
+		if isOverdue(*node.noteItem.Due) {
+			dueStyle = dueStyle.Foreground(theme.ColorRed)
+		} else if isDueToday(*node.noteItem.Due) {
+			dueStyle = dueStyle.Foreground(theme.ColorYellow)
+		}
+	}
+
 	timeStyle := lipgloss.NewStyle().Foreground(theme.ColorOverlay1)
 
 	if node.depth > 0 {
@@ -536,17 +583,17 @@ func (n NoteList) renderNode(visibleIndex int) string {
 			connector = "└── "
 		}
 		connStyle := lipgloss.NewStyle().Foreground(theme.ColorOverlay0)
-		line := indicator + indent + connStyle.Render(connector) + titleStyle.Render(displayTitle) + timeStyle.Render(timeSuffix)
+		line := indicator + indent + connStyle.Render(connector) + titleStyle.Render(displayTitle) + dueStyle.Render(dueSuffix) + timeStyle.Render(timeSuffix)
 		return lipgloss.NewStyle().Width(n.width).Render(line)
 	}
 
 	// Root-level note
-	line := indicator + titleStyle.Render(displayTitle) + timeStyle.Render(timeSuffix)
+	line := indicator + titleStyle.Render(displayTitle) + dueStyle.Render(dueSuffix) + timeStyle.Render(timeSuffix)
 	return lipgloss.NewStyle().Width(n.width).Render(line)
 }
 
 // buildTree constructs a hierarchical tree from a flat list of NoteItems.
-func buildTree(items []NoteItem, expandAll bool, showPinned bool) []*treeNode {
+func buildTree(items []NoteItem, expandAll bool, showPinned bool, todoFolder string) []*treeNode {
 	if len(items) == 0 {
 		return nil
 	}
@@ -636,6 +683,18 @@ func buildTree(items []NoteItem, expandAll bool, showPinned bool) []*treeNode {
 		}
 	}
 
+	// Sort TODO folder to the top of the folders list
+	if todoFolder != "" {
+		sort.SliceStable(folders, func(i, j int) bool {
+			isTodoI := strings.EqualFold(folders[i].name, todoFolder)
+			isTodoJ := strings.EqualFold(folders[j].name, todoFolder)
+			if isTodoI != isTodoJ {
+				return isTodoI
+			}
+			return false // preserve existing alphabetical order
+		})
+	}
+
 	result = append(result, folders...)
 	result = append(result, rootNotes...)
 	setLastChildFlags(result)
@@ -691,6 +750,22 @@ func humanizeTitle(title string) string {
 		}
 	}
 	return strings.Join(words, " ")
+}
+
+// isOverdue returns true if the due date is before today (local time).
+func isOverdue(due time.Time) bool {
+	y1, m1, d1 := time.Now().Date()
+	y2, m2, d2 := due.Date()
+	today := time.Date(y1, m1, d1, 0, 0, 0, 0, time.Local)
+	dueDate := time.Date(y2, m2, d2, 0, 0, 0, 0, time.Local)
+	return dueDate.Before(today)
+}
+
+// isDueToday returns true if the due date is today (local time).
+func isDueToday(due time.Time) bool {
+	y1, m1, d1 := time.Now().Date()
+	y2, m2, d2 := due.Date()
+	return y1 == y2 && m1 == m2 && d1 == d2
 }
 
 // fuzzyMatch returns true if every character in pattern appears (in order,
@@ -821,7 +896,7 @@ func (n *NoteList) SetFilter(pattern string) {
 	n.filterText = pattern
 	if pattern == "" {
 		// Restore full list
-		n.tree = buildTree(n.items, n.expandAll, n.showPinned)
+		n.tree = buildTree(n.items, n.expandAll, n.showPinned, n.todoFolder)
 		n.flatVisible = nil
 		n.rebuildFlatVisible()
 		n.cursor = 0
@@ -849,7 +924,7 @@ func (n *NoteList) SetFilter(pattern string) {
 		filtered[i] = m.item
 	}
 
-	n.tree = buildTree(filtered, true, false) // always expand when filtering, no pinned section
+	n.tree = buildTree(filtered, true, false, "") // always expand when filtering, no pinned section
 	n.flatVisible = nil
 	n.rebuildFlatVisible()
 	n.cursor = 0
@@ -861,7 +936,7 @@ func (n *NoteList) SetFilter(pattern string) {
 // are preserved so AllItems() still returns the full set.
 func (n *NoteList) SetFilteredItems(items []NoteItem, filterText string) {
 	n.filterText = filterText
-	n.tree = buildTree(items, true, false)
+	n.tree = buildTree(items, true, false, "")
 	n.flatVisible = nil
 	n.rebuildFlatVisible()
 	n.cursor = 0

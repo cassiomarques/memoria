@@ -2,6 +2,8 @@ package tui
 
 import (
 	"testing"
+
+	"github.com/cassiomarques/memoria/internal/tui/components"
 )
 
 func newTestApp() App {
@@ -530,5 +532,112 @@ func TestApp_FilterBrowsing_EscClosesPreviewFirst(t *testing.T) {
 	}
 	if a.filterBuf != "" {
 		t.Errorf("expected empty filterBuf, got %q", a.filterBuf)
+	}
+}
+
+// --- Todo command parsing tests ---
+
+func TestParseCommand_Todo(t *testing.T) {
+	cmd, err := ParseCommand("todo fix auth bug")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cmd.Name != "todo" {
+		t.Errorf("expected command name 'todo', got %q", cmd.Name)
+	}
+	if len(cmd.Args) != 3 {
+		t.Errorf("expected 3 args, got %d", len(cmd.Args))
+	}
+}
+
+func TestParseCommand_Todos(t *testing.T) {
+	cmd, err := ParseCommand("todos")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cmd.Name != "todos" {
+		t.Errorf("expected command name 'todos', got %q", cmd.Name)
+	}
+}
+
+func TestApp_ToggleTodoDone_NonTodo(t *testing.T) {
+	a := newTestApp()
+	// Select a regular note (not a todo)
+	a.noteList.SetItems([]components.NoteItem{
+		{Path: "work/meeting.md", Title: "meeting", Folder: "work"},
+	})
+	a.noteList.SetSize(80, 40)
+
+	// Should show "Not a todo" since the selected note isn't a todo
+	a.toggleTodoDone()
+	// No panic, no error — we just can't verify the message without a service
+}
+
+func TestApp_ToggleTodoDone_NoSelection(t *testing.T) {
+	a := NewApp()
+	a.width = 80
+	a.height = 24
+	// Empty list, no selection
+	a.toggleTodoDone()
+	// Should not panic
+}
+
+func TestCmdTodo_ParsesTagsDueFolderArgs(t *testing.T) {
+	// Test the ParseCommand side which feeds into cmdTodo.
+	tests := []struct {
+		input    string
+		wantArgs []string
+	}{
+		{"todo buy milk #shopping", []string{"buy", "milk", "#shopping"}},
+		{"todo fix bug @due(2026-04-15)", []string{"fix", "bug", "@due(2026-04-15)"}},
+		{"todo task --folder work", []string{"task", "--folder", "work"}},
+		{"todo big task #urgent @due(2026-05-01) --folder projects", []string{"big", "task", "#urgent", "@due(2026-05-01)", "--folder", "projects"}},
+	}
+	for _, tt := range tests {
+		cmd, err := ParseCommand(tt.input)
+		if err != nil {
+			t.Fatalf("ParseCommand(%q): %v", tt.input, err)
+		}
+		if cmd.Name != "todo" {
+			t.Errorf("ParseCommand(%q) name = %q, want 'todo'", tt.input, cmd.Name)
+		}
+		if len(cmd.Args) != len(tt.wantArgs) {
+			t.Errorf("ParseCommand(%q) args = %v (len %d), want %v (len %d)",
+				tt.input, cmd.Args, len(cmd.Args), tt.wantArgs, len(tt.wantArgs))
+			continue
+		}
+		for i, arg := range cmd.Args {
+			if arg != tt.wantArgs[i] {
+				t.Errorf("ParseCommand(%q) args[%d] = %q, want %q", tt.input, i, arg, tt.wantArgs[i])
+			}
+		}
+	}
+}
+
+func TestCmdTodo_NoArgsShowsUsage(t *testing.T) {
+	a := newTestApp()
+	// cmdTodo with empty args should set an error message
+	a.cmdTodo(nil)
+	if a.statusBar.Message() == "" {
+		t.Error("expected usage message when no args provided")
+	}
+}
+
+func TestCmdTodo_InvalidDueDateShowsError(t *testing.T) {
+	a := newTestApp()
+	a.cmdTodo([]string{"task", "@due(not-a-date)"})
+	msg := a.statusBar.Message()
+	if msg == "" {
+		t.Error("expected error message for invalid due date")
+	}
+}
+
+func TestCmdTodo_OnlyTagsNoTitleShowsError(t *testing.T) {
+	a := newTestApp()
+	// Only tags, no title words
+	a.cmdTodo([]string{"#urgent", "#work"})
+	msg := a.statusBar.Message()
+	if msg == "" {
+		t.Error("expected error message when title is empty")
 	}
 }

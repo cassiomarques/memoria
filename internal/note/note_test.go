@@ -367,3 +367,137 @@ func TestFullContent(t *testing.T) {
 		t.Errorf("Content after frontmatter = %q, want %q", strings.TrimSpace(parts[2]), "Hello world")
 	}
 }
+
+// --- Slugify tests ---
+
+func TestSlugify(t *testing.T) {
+	tests := []struct {
+		input string
+		want  string
+	}{
+		{"Fix Auth Bug", "fix-auth-bug"},
+		{"buy milk", "buy-milk"},
+		{"hello", "hello"},
+		{"  spaces  everywhere  ", "spaces-everywhere"},
+		{"UPPER_CASE_TITLE", "upper-case-title"},
+		{"already-slugged", "already-slugged"},
+		{"special!@#chars$%^here", "specialcharshere"},
+		{"", ""},
+		{"123 numbers", "123-numbers"},
+		{"multiple---dashes___underscores", "multiple-dashes-underscores"},
+	}
+	for _, tt := range tests {
+		got := Slugify(tt.input)
+		if got != tt.want {
+			t.Errorf("Slugify(%q) = %q, want %q", tt.input, got, tt.want)
+		}
+	}
+}
+
+// --- Todo field tests ---
+
+func TestNote_IsOverdue(t *testing.T) {
+	yesterday := time.Now().AddDate(0, 0, -1)
+	tomorrow := time.Now().AddDate(0, 0, 1)
+
+	tests := []struct {
+		name string
+		due  *time.Time
+		done bool
+		want bool
+	}{
+		{"nil due", nil, false, false},
+		{"yesterday, not done", &yesterday, false, true},
+		{"yesterday, done", &yesterday, true, false},
+		{"tomorrow, not done", &tomorrow, false, false},
+	}
+	for _, tt := range tests {
+		n := &Note{Todo: true, Done: tt.done, Due: tt.due}
+		if got := n.IsOverdue(); got != tt.want {
+			t.Errorf("IsOverdue() %s = %v, want %v", tt.name, got, tt.want)
+		}
+	}
+}
+
+func TestNote_IsDueToday(t *testing.T) {
+	today := time.Now()
+	yesterday := time.Now().AddDate(0, 0, -1)
+	tomorrow := time.Now().AddDate(0, 0, 1)
+
+	tests := []struct {
+		name string
+		due  *time.Time
+		done bool
+		want bool
+	}{
+		{"nil due", nil, false, false},
+		{"today, not done", &today, false, true},
+		{"today, done", &today, true, false},
+		{"yesterday", &yesterday, false, false},
+		{"tomorrow", &tomorrow, false, false},
+	}
+	for _, tt := range tests {
+		n := &Note{Todo: true, Done: tt.done, Due: tt.due}
+		if got := n.IsDueToday(); got != tt.want {
+			t.Errorf("IsDueToday() %s = %v, want %v", tt.name, got, tt.want)
+		}
+	}
+}
+
+func TestFullContent_TodoFields(t *testing.T) {
+	due := time.Date(2026, 4, 15, 0, 0, 0, 0, time.UTC)
+	n := &Note{
+		Path:     "TODO/buy-milk.md",
+		Title:    "buy-milk",
+		Content:  "Get 2% milk\n",
+		Tags:     []string{"shopping"},
+		Folder:   "TODO",
+		Created:  time.Now(),
+		Modified: time.Now(),
+		Todo:     true,
+		Done:     false,
+		Due:      &due,
+	}
+
+	full := n.FullContent()
+
+	if !strings.Contains(full, "todo: true") {
+		t.Error("expected FullContent to contain 'todo: true'")
+	}
+	if !strings.Contains(full, "done: false") {
+		t.Error("expected FullContent to contain 'done: false'")
+	}
+	if !strings.Contains(full, "due: \"2026-04-15\"") && !strings.Contains(full, "due: 2026-04-15") {
+		t.Errorf("expected FullContent to contain due date, got:\n%s", full)
+	}
+}
+
+func TestParseNote_TodoFields(t *testing.T) {
+	raw := `---
+tags:
+    - work
+todo: true
+done: false
+due: 2026-04-15
+created: 2026-01-01T00:00:00Z
+modified: 2026-01-01T00:00:00Z
+---
+Do the thing
+`
+	n, err := ParseNote("TODO/task.md", raw)
+	if err != nil {
+		t.Fatalf("ParseNote error: %v", err)
+	}
+	if !n.Todo {
+		t.Error("expected Todo=true")
+	}
+	if n.Done {
+		t.Error("expected Done=false")
+	}
+	if n.Due == nil {
+		t.Fatal("expected Due to be non-nil")
+	}
+	if n.Due.Format(time.DateOnly) != "2026-04-15" {
+		t.Errorf("expected due=2026-04-15, got %s", n.Due.Format(time.DateOnly))
+	}
+}
