@@ -111,6 +111,70 @@ func TestRoundTrip_Search(t *testing.T) {
 	}
 }
 
+func TestSearch_MultiWordIsAND(t *testing.T) {
+	env := setupTestEnv(t)
+
+	// "apple" matches both notes, but "apple banana" should only match the one with both words
+	env.svc.Create("fruit.md", "I like apple and banana smoothies", nil)
+	env.svc.Create("tech.md", "apple released a new laptop", nil)
+
+	env.startServer(t)
+
+	// Search for both words — should only match fruit.md
+	client := env.dial(t)
+	resp, err := client.Send(ipc.Request{
+		Command: ipc.CmdSearch,
+		Args:    map[string]string{"query": "apple banana"},
+	})
+	if err != nil {
+		t.Fatalf("Send: %v", err)
+	}
+	if !resp.OK {
+		t.Fatalf("expected OK, got error: %s", resp.Error)
+	}
+
+	var results []search.SearchResult
+	json.Unmarshal(resp.Data, &results)
+	if len(results) != 1 {
+		t.Fatalf("expected 1 result (AND), got %d", len(results))
+	}
+	if results[0].Path != "fruit.md" {
+		t.Errorf("expected fruit.md, got %s", results[0].Path)
+	}
+}
+
+func TestSearch_ExactPhrase(t *testing.T) {
+	env := setupTestEnv(t)
+
+	// Both notes contain "apple" and "pie", but only one has the exact phrase "apple pie"
+	env.svc.Create("recipe.md", "This is my famous apple pie recipe", nil)
+	env.svc.Create("random.md", "I ate an apple then later had some pie", nil)
+
+	env.startServer(t)
+
+	// Quoted phrase — should only match the note with "apple pie" adjacent
+	client := env.dial(t)
+	resp, err := client.Send(ipc.Request{
+		Command: ipc.CmdSearch,
+		Args:    map[string]string{"query": `"apple pie"`},
+	})
+	if err != nil {
+		t.Fatalf("Send: %v", err)
+	}
+	if !resp.OK {
+		t.Fatalf("expected OK, got error: %s", resp.Error)
+	}
+
+	var results []search.SearchResult
+	json.Unmarshal(resp.Data, &results)
+	if len(results) != 1 {
+		t.Fatalf("expected 1 result (exact phrase), got %d", len(results))
+	}
+	if results[0].Path != "recipe.md" {
+		t.Errorf("expected recipe.md, got %s", results[0].Path)
+	}
+}
+
 func TestRoundTrip_Tags(t *testing.T) {
 	env := setupTestEnv(t)
 	env.svc.Create("tagged.md", "content", []string{"golang", "tui"})
