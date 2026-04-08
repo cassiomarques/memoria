@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -287,6 +288,7 @@ func buildRequest(command string, args []string) ipc.Request {
 		}
 	case "new":
 		// memoria new <path> [--tags tag1,tag2]
+		// Content can be piped via stdin
 		if len(args) > 0 {
 			req.Args["path"] = args[0]
 		}
@@ -295,6 +297,9 @@ func buildRequest(command string, args []string) ipc.Request {
 				req.Args["tags"] = args[i+1]
 				i++
 			}
+		}
+		if content := readStdin(); content != "" {
+			req.Args["content"] = content
 		}
 	case "todo":
 		// memoria todo <title> [--folder F] [--tags t1,t2]
@@ -321,6 +326,24 @@ func buildRequest(command string, args []string) ipc.Request {
 	}
 
 	return req
+}
+
+// readStdin returns stdin content if it's being piped (not a terminal).
+// Returns empty string if stdin is a terminal or on read error.
+func readStdin() string {
+	info, err := os.Stdin.Stat()
+	if err != nil {
+		return ""
+	}
+	// Check if stdin is a pipe or redirect (not a terminal)
+	if info.Mode()&os.ModeCharDevice != 0 {
+		return ""
+	}
+	data, err := io.ReadAll(os.Stdin)
+	if err != nil {
+		return ""
+	}
+	return string(data)
 }
 
 // printResponse outputs the response to stdout.

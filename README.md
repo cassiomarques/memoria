@@ -228,9 +228,23 @@ memoria sync
 
 Create a new note. The path is relative to the notes directory; folders are created automatically. Tags are comma-separated.
 
+Content can be piped via stdin. Without stdin, an empty note (frontmatter only) is created.
+
 ```bash
 memoria new ideas/cool-project.md
 memoria new logs/deploy.md --tags deploy,ops
+
+# Pipe content from stdin
+echo "# Meeting Notes" | memoria new meetings/standup.md
+
+# Here-doc
+memoria new logs/deploy.md --tags ops <<EOF
+# Deploy Log
+Deployed v2.3.1 to production
+EOF
+
+# From a file
+cat draft.md | memoria new final/report.md
 ```
 
 #### `memoria todo <title> [--folder F] [--tags t1,t2]`

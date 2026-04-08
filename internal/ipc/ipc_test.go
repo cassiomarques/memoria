@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync/atomic"
 	"testing"
 
@@ -308,6 +309,35 @@ func TestRoundTrip_New(t *testing.T) {
 	}
 	if len(n.Tags) != 2 {
 		t.Errorf("expected 2 tags, got %d", len(n.Tags))
+	}
+}
+
+func TestRoundTrip_NewWithContent(t *testing.T) {
+	env := setupTestEnv(t)
+
+	env.startServer(t)
+	client := env.dial(t)
+
+	resp, err := client.Send(ipc.Request{
+		Command: ipc.CmdNew,
+		Args: map[string]string{
+			"path":    "with-content.md",
+			"content": "# Hello\nThis has body text",
+		},
+	})
+	if err != nil {
+		t.Fatalf("Send: %v", err)
+	}
+	if !resp.OK {
+		t.Fatalf("expected OK, got error: %s", resp.Error)
+	}
+
+	n, err := env.svc.Get("with-content.md")
+	if err != nil {
+		t.Fatalf("note not found: %v", err)
+	}
+	if !strings.Contains(n.Content, "This has body text") {
+		t.Errorf("expected content to contain body text, got: %s", n.Content)
 	}
 }
 
