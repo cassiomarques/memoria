@@ -156,48 +156,161 @@ Type `:` to open the command bar. Tab completion is available for paths, folders
 
 ## CLI Subcommands
 
-Memoria can also be used from the command line without opening the TUI. This is useful for scripting, piping, and AI assistant integration (e.g. GitHub Copilot CLI).
+Memoria can be used from the command line without opening the TUI. Every command works both when the TUI is running and when it's not.
+
+### Commands Reference
+
+#### `memoria search <query>`
+
+Full-text search across all notes using the Bleve index. Results are ranked by relevance.
 
 ```bash
-memoria search "database"       # Full-text search
-memoria list                    # List all notes
-memoria list Projects           # List notes in a folder
-memoria tags                    # Show all tags
-memoria todos                   # Show all todos
-memoria todos overdue           # Show overdue todos
-memoria cat daily.md            # Print note content
-memoria sync                    # Sync with git remote
-memoria new ideas/cool.md       # Create a note
-memoria todo "Buy milk"         # Create a todo
+memoria search "meeting notes"
+memoria search "database migration" --json
 ```
 
-### How it works
+Output includes the note path and relevance score. With `--json`, also includes matched text fragments with `<mark>` highlights.
 
-When the TUI is running, CLI commands communicate with it via a local Unix socket. This means:
+#### `memoria list [folder]`
 
-- **Full Bleve search** — CLI gets the same powerful search as the TUI
-- **Auto-refresh** — The TUI updates automatically when the CLI creates or syncs notes
+List note paths. Without arguments, lists all notes recursively. With a folder name, lists only notes in that folder.
 
-When no TUI is running, commands open the stores directly with full functionality.
+```bash
+memoria list                    # All notes
+memoria list Projects           # Notes in Projects/
+memoria list Projects --json    # As JSON array
+```
 
-### Flags
+#### `memoria tags`
+
+List all tags with note counts.
+
+```bash
+memoria tags
+memoria tags --json
+```
+
+#### `memoria todos [filter]`
+
+List todo notes. Optional filter: `overdue`, `today`, `pending`, `done`.
+
+```bash
+memoria todos                   # All todos
+memoria todos overdue           # Past due and not done
+memoria todos today             # Due today
+memoria todos pending           # Not yet done
+memoria todos done              # Completed
+memoria todos --json            # JSON output
+```
+
+#### `memoria cat <path>`
+
+Print a note's markdown content to stdout. The path is relative to your notes directory.
+
+```bash
+memoria cat daily.md
+memoria cat Projects/roadmap.md
+memoria cat Projects/roadmap.md --json   # Content as JSON string
+```
+
+#### `memoria sync`
+
+Pull from the git remote, reindex all notes, then commit and push local changes. Equivalent to the TUI's `:sync` command.
+
+```bash
+memoria sync
+```
+
+#### `memoria new <path> [--tags tag1,tag2]`
+
+Create a new note. The path is relative to the notes directory; folders are created automatically. Tags are comma-separated.
+
+```bash
+memoria new ideas/cool-project.md
+memoria new logs/deploy.md --tags deploy,ops
+```
+
+#### `memoria todo <title> [--folder F] [--tags t1,t2]`
+
+Create a new todo note. The title is slugified into a filename (e.g. "Buy groceries" → `buy-groceries.md`). Defaults to the `TODO/` folder.
+
+```bash
+memoria todo "Buy groceries"
+memoria todo "Review PR" --folder "Work/tasks" --tags review,urgent
+```
+
+### Global Flags
 
 | Flag | Description |
 |------|-------------|
-| `--json` | Output structured JSON (for scripting / AI tools) |
-| `--home <dir>` | Use a custom config/data directory |
+| `--json` | Output structured JSON instead of human-readable text |
+| `--home <dir>` | Use a custom config/data directory instead of `~/.memoria` |
+| `--version`, `-v` | Print version and exit |
+| `--help`, `-h` | Print usage and exit |
 
-### Examples with Copilot CLI
+### How It Works: TUI + CLI Coordination
+
+When you run a CLI command while the TUI is open in another terminal, the two coordinate automatically:
+
+1. **The TUI starts a local Unix socket** at `~/.memoria/memoria.sock` on launch
+2. **CLI commands connect to that socket**, sending the request to the running TUI process
+3. **The TUI executes the command** using its already-open services (including the Bleve full-text index)
+4. **After write commands** (`sync`, `new`, `todo`), the TUI automatically refreshes its note list and tags — you'll see the changes appear immediately
+
+When no TUI is running, CLI commands open the stores (filesystem, SQLite, Bleve, git) directly. Everything works the same, there's just no live TUI to refresh.
+
+This design means:
+- **No lock conflicts** — the CLI never fights the TUI for file locks
+- **Full search power** — CLI search uses the same Bleve index as the TUI, not a degraded fallback
+- **Instant feedback** — create a note via CLI and see it appear in the TUI within a second
+
+### External Integration Examples
+
+#### GitHub Copilot CLI / AI Assistants
+
+The `--json` flag makes output machine-parseable, which is ideal for AI tools operating on your notes:
 
 ```bash
-# Search notes and pipe to another tool
-memoria search "meeting notes" --json | jq '.[].Path'
+# AI assistant searches your notes
+memoria search "authentication flow" --json | jq '.[].Path'
 
-# Create a note from a script
-memoria new "logs/deploy-$(date +%Y%m%d).md" --tags deploy,logs
+# AI creates a note with content piped in
+memoria new "summaries/meeting-2024-03-15.md" --tags meeting,summary
 
-# Check overdue todos
+# AI checks what's overdue
 memoria todos overdue --json
+```
+
+#### Shell Scripts and Automation
+
+```bash
+# Daily backup of note list
+memoria list --json > ~/backups/memoria-notes-$(date +%F).json
+
+# Create a daily journal entry
+memoria new "journal/$(date +%Y-%m-%d).md" --tags journal,daily
+
+# Sync from a cron job (works even without TUI)
+memoria sync
+
+# Count notes per tag
+memoria tags --json | jq -r '.[] | "\(.Tag): \(.Count)"'
+
+# Find all notes about a topic and open them
+memoria search "kubernetes" --json | jq -r '.[].Path' | xargs -I{} memoria cat {}
+```
+
+#### Pipe-Friendly
+
+All commands write to stdout and errors to stderr, so they compose naturally with Unix pipes:
+
+```bash
+# Search and preview matches
+memoria search "TODO" --json | jq -r '.[].Path' | while read p; do
+  echo "=== $p ==="
+  memoria cat "$p" | head -5
+  echo
+done
 ```
 
 ## Configuration
