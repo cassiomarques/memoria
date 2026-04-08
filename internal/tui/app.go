@@ -102,6 +102,7 @@ type App struct {
 
 	version           string
 	defaultTodoFolder string
+	headerCache       string // rendered header, updated on resize
 }
 
 // NewApp creates a new App with all sub-components initialized (no service).
@@ -1763,7 +1764,6 @@ func (a *App) folderDisplay() string {
 const (
 	statusBarHeight  = 1
 	commandBarHeight = 1
-	headerHeight     = 10
 )
 
 // memoriaASCII is the ASCII art title.
@@ -1790,7 +1790,7 @@ func colorizeASCII(lines []string) string {
 	return result.String()
 }
 
-func (a *App) renderHeader() string {
+func (a *App) buildHeader() string {
 	art := colorizeASCII(memoriaASCII)
 
 	versionStyle := lipgloss.NewStyle().Foreground(theme.ColorOverlay0).Italic(true)
@@ -1828,7 +1828,10 @@ func (a *App) resizeComponents() {
 	a.statusBar.SetWidth(a.width)
 	a.commandBar.SetWidth(a.width)
 
-	contentHeight := a.height - statusBarHeight - commandBarHeight - headerHeight
+	a.headerCache = a.buildHeader()
+	headerH := lipgloss.Height(a.headerCache)
+
+	contentHeight := a.height - statusBarHeight - commandBarHeight - headerH
 	if contentHeight < 1 {
 		contentHeight = 1
 	}
@@ -1876,7 +1879,7 @@ func (a App) View() tea.View {
 	statusView := a.statusBar.View()
 
 	content := lipgloss.JoinVertical(lipgloss.Left,
-		a.renderHeader(),
+		a.headerCache,
 		mainContent,
 		barView,
 		statusView,

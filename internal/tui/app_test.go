@@ -4,6 +4,7 @@ import (
 	"strings"
 	"testing"
 
+	"charm.land/lipgloss/v2"
 	"github.com/cassiomarques/memoria/internal/tui/components"
 )
 
@@ -692,5 +693,40 @@ func TestCmdTodos_NoService(t *testing.T) {
 	msg := a.statusBar.Message()
 	if msg == "" {
 		t.Error("expected error message when no service")
+	}
+}
+
+func TestApp_ResizeComponents_DynamicHeaderHeight(t *testing.T) {
+	// At narrow widths, the ASCII art header wraps and becomes taller.
+	// resizeComponents must measure the actual header height so the note
+	// list + status bar always fit within the terminal.
+	tests := []struct {
+		width  int
+		height int
+	}{
+		{80, 24},
+		{40, 24}, // narrow: header wraps, height increases
+		{60, 15}, // short terminal
+	}
+
+	for _, tt := range tests {
+		a := NewApp()
+		a.width = tt.width
+		a.height = tt.height
+		a.version = "test"
+		a.resizeComponents()
+
+		headerH := lipgloss.Height(a.headerCache)
+
+		if a.headerCache == "" {
+			t.Errorf("width=%d height=%d: headerCache is empty", tt.width, tt.height)
+		}
+		if headerH < 10 {
+			t.Errorf("width=%d: header height %d < 10 (minimum without wrapping)", tt.width, headerH)
+		}
+		// At width 40, the header should be taller due to line wrapping
+		if tt.width == 40 && headerH <= 10 {
+			t.Errorf("width=40: expected header height > 10 due to wrapping, got %d", headerH)
+		}
 	}
 }
