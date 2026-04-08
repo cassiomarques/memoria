@@ -85,7 +85,7 @@ func printUsage() {
 Run without arguments to start the interactive TUI.
 
 Commands:
-  search <query>          Full-text search across all notes
+  search <query>          Full-text search (AND across words; --exact for phrase match)
   list [folder]           List notes (optionally filtered by folder)
   tags                    List all tags with note counts
   todos [filter]          List todos (filter: overdue, today, pending, done)
@@ -257,8 +257,21 @@ func buildRequest(command string, args []string) ipc.Request {
 
 	switch command {
 	case "search":
-		if len(args) > 0 {
-			req.Args["query"] = strings.Join(args, " ")
+		var exact bool
+		var queryParts []string
+		for _, a := range args {
+			if a == "--exact" {
+				exact = true
+			} else {
+				queryParts = append(queryParts, a)
+			}
+		}
+		if len(queryParts) > 0 {
+			q := strings.Join(queryParts, " ")
+			if exact {
+				q = `"` + q + `"`
+			}
+			req.Args["query"] = q
 		}
 	case "list":
 		if len(args) > 0 {

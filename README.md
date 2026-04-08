@@ -160,13 +160,16 @@ Memoria can be used from the command line without opening the TUI. Every command
 
 ### Commands Reference
 
-#### `memoria search <query>`
+#### `memoria search <query> [--exact]`
 
 Full-text search across all notes using the Bleve index. Results are ranked by relevance.
 
+Multiple words are AND'd — a note must contain all words to match. Use `--exact` for exact phrase matching (words must appear in that exact order).
+
 ```bash
-memoria search "meeting notes"
-memoria search "database migration" --json
+memoria search "meeting notes"                # Notes containing both "meeting" AND "notes"
+memoria search "database migration" --json     # JSON output with highlights
+memoria search --exact "approved and built"    # Exact phrase match
 ```
 
 Output includes the note path and relevance score. With `--json`, also includes matched text fragments with `<mark>` highlights.

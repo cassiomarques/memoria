@@ -180,7 +180,7 @@ func (h *Handler) handleSearch(req Request) Response {
 	if l, err := strconv.Atoi(req.Args["limit"]); err == nil && l > 0 && l <= 1000 {
 		limit = l
 	}
-	results, err := h.svc.Search(query, limit)
+	results, err := h.svc.SearchFuzzy(query, limit)
 	if err != nil {
 		return ErrResponse(err.Error())
 	}
