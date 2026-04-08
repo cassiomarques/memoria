@@ -197,6 +197,10 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return a, clearMessageCmd()
 
 	case clearMessageMsg:
+		// Don't auto-clear confirmation prompts that require user input
+		if a.pendingDelete {
+			return a, nil
+		}
 		a.statusBar.ClearMessage()
 		// Restore persistent filter indicator if still filtering
 		if a.filterState != filterOff {

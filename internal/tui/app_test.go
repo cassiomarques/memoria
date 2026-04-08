@@ -730,3 +730,51 @@ func TestApp_ResizeComponents_DynamicHeaderHeight(t *testing.T) {
 		}
 	}
 }
+
+func TestApp_DeleteConfirmation_NotAutocleared(t *testing.T) {
+	a := newTestApp()
+
+	// Navigate to a note (skip folders)
+	for a.noteList.SelectedItem() == nil {
+		a.noteList.MoveDown()
+	}
+
+	// Simulate initiateDelete setting up the confirmation
+	a.pendingDelete = true
+	a.pendingDeletePath = "some/note.md"
+	a.setMessage("Delete 'some/note.md'? (y/N)", true)
+
+	// Verify message is set
+	if a.statusBar.Message() == "" {
+		t.Fatal("expected confirmation message to be set")
+	}
+
+	// Simulate the clearMessageMsg arriving (after 3s timer)
+	result, _ := a.Update(clearMessageMsg{})
+	a = result.(App)
+
+	// Message must NOT be cleared while pendingDelete is active
+	if a.statusBar.Message() == "" {
+		t.Error("confirmation message was cleared while pendingDelete is true")
+	}
+}
+
+func TestApp_RegularMessage_StillAutoclears(t *testing.T) {
+	a := newTestApp()
+
+	// Set a regular (non-confirmation) message
+	a.setMessage("Edited: foo.md", false)
+
+	if a.statusBar.Message() == "" {
+		t.Fatal("expected message to be set")
+	}
+
+	// Simulate clearMessageMsg
+	result, _ := a.Update(clearMessageMsg{})
+	a = result.(App)
+
+	// Regular messages should be cleared
+	if a.statusBar.Message() != "" {
+		t.Errorf("expected message to be cleared, got %q", a.statusBar.Message())
+	}
+}
