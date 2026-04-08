@@ -21,6 +21,7 @@ Memoria keeps your notes as plain Markdown files organized in folders, indexes t
   - [Global Flags](#global-flags)
   - [How It Works: TUI + CLI Coordination](#how-it-works-tui--cli-coordination)
   - [External Integration Examples](#external-integration-examples)
+- [MCP Server](#mcp-server)
 - [Configuration](#configuration)
 - [How notes are stored](#how-notes-are-stored)
 - [Architecture](#architecture)
@@ -349,6 +350,73 @@ memoria search "TODO" --json | jq -r '.[].Path' | while read p; do
   echo
 done
 ```
+
+## MCP Server
+
+Memoria includes a built-in [MCP](https://modelcontextprotocol.io/) (Model Context Protocol) server, allowing AI assistants like GitHub Copilot CLI, VS Code Copilot, Claude Desktop, and other MCP clients to interact with your notes directly.
+
+### Starting the MCP server
+
+```bash
+memoria mcp
+```
+
+This starts the MCP server on stdio (stdin/stdout). You don't typically run this manually — it's launched by your MCP client.
+
+### Configuring with GitHub Copilot CLI
+
+Add to your [MCP configuration](https://docs.github.com/en/copilot/using-github-copilot/using-copilot-coding-agent/using-mcp-servers-with-copilot-coding-agent):
+
+```json
+{
+  "mcpServers": {
+    "memoria": {
+      "command": "memoria",
+      "args": ["mcp"]
+    }
+  }
+}
+```
+
+To use a custom notes directory:
+
+```json
+{
+  "mcpServers": {
+    "memoria": {
+      "command": "memoria",
+      "args": ["mcp", "--home", "/path/to/notes"]
+    }
+  }
+}
+```
+
+### Available tools
+
+| Tool | Description |
+|------|-------------|
+| `search` | Full-text search across all notes with fuzzy matching |
+| `list` | List notes, optionally filtered by folder |
+| `cat` | Read a note's full content |
+| `tags` | List all tags with note counts |
+| `todos` | List todos, optionally filtered (overdue/today/pending/done) |
+| `new` | Create a new note with optional content and tags |
+| `todo` | Create a new todo |
+| `sync` | Sync notes with the git remote |
+
+### How it works
+
+The MCP server delegates each tool call to the `memoria` CLI with `--json` output. This means:
+
+- If the TUI is running, tool calls go through the IPC socket and the TUI refreshes automatically
+- If no TUI is running, stores are opened directly for each call
+- No extra ports, no HTTP — just process-level stdio communication
+
+### Environment variables
+
+| Variable | Description |
+|----------|-------------|
+| `MEMORIA_BIN` | Override the path to the memoria binary used for tool execution |
 
 ## Configuration
 

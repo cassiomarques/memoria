@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -13,6 +14,7 @@ import (
 	"github.com/cassiomarques/memoria/internal/editor"
 	"github.com/cassiomarques/memoria/internal/git"
 	"github.com/cassiomarques/memoria/internal/ipc"
+	mcpserver "github.com/cassiomarques/memoria/internal/mcp"
 	"github.com/cassiomarques/memoria/internal/search"
 	"github.com/cassiomarques/memoria/internal/service"
 	"github.com/cassiomarques/memoria/internal/storage"
@@ -26,6 +28,7 @@ var version = "dev"
 var knownSubcommands = map[string]bool{
 	"search": true, "list": true, "tags": true, "todos": true,
 	"cat": true, "sync": true, "new": true, "todo": true,
+	"mcp": true,
 }
 
 func main() {
@@ -63,6 +66,13 @@ func main() {
 			printUsage()
 			os.Exit(0)
 		}
+		if filtered[0] == "mcp" {
+			if err := runMCP(homeDir); err != nil {
+				fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+				os.Exit(1)
+			}
+			return
+		}
 		if knownSubcommands[filtered[0]] {
 			if err := runCLI(homeDir, jsonOutput, filtered[0], filtered[1:]); err != nil {
 				fmt.Fprintf(os.Stderr, "Error: %v\n", err)
@@ -94,6 +104,7 @@ Commands:
   sync                    Sync notes (git pull + reindex + commit + push)
   new <path> [--tags t]   Create a new note
   todo <title> [opts]     Create a new todo (--folder F, --tags t1,t2)
+  mcp                     Start the MCP server (stdio transport)
   help                    Show this help
 
 Global flags:
@@ -462,4 +473,15 @@ func runDirect(homeDir string, jsonOutput bool, req ipc.Request) error {
 	handler := ipc.NewHandler(svc)
 	resp := handler.Dispatch(req)
 	return printResponse(&resp, jsonOutput)
+}
+
+// runMCP starts the MCP stdio server.
+func runMCP(homeDir string) error {
+	binPath, err := mcpserver.ResolveBinPath()
+	if err != nil {
+		return fmt.Errorf("resolving binary path: %w", err)
+	}
+
+	srv := mcpserver.NewServer(binPath, homeDir, version)
+	return srv.Run(context.Background())
 }
