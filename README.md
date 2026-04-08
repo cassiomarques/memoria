@@ -9,6 +9,26 @@ Memoria keeps your notes as plain Markdown files organized in folders, indexes t
 
 ![Memoria - Notes tree with preview](assets/notes-with-preview.jpg)
 
+## Table of Contents
+
+- [Features](#features)
+- [Installation](#installation)
+- [Quick start](#quick-start)
+- [Keybindings](#keybindings)
+- [Commands](#commands) (TUI)
+- [CLI Subcommands](#cli-subcommands)
+  - [Commands Reference](#commands-reference)
+  - [Global Flags](#global-flags)
+  - [How It Works: TUI + CLI Coordination](#how-it-works-tui--cli-coordination)
+  - [External Integration Examples](#external-integration-examples)
+- [Configuration](#configuration)
+- [How notes are stored](#how-notes-are-stored)
+- [Architecture](#architecture)
+- [Tech stack](#tech-stack)
+- [Development](#development)
+- [Releasing](#releasing)
+- [License](#license)
+
 ## Features
 
 - **Plain Markdown** — Notes are `.md` files with YAML frontmatter. 
