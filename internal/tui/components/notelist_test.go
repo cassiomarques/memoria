@@ -1627,3 +1627,106 @@ func TestSetItems_PreservesCollapsedFolders(t *testing.T) {
 		t.Errorf("expected 12 visible after SetItems (collapsed preserved), got %d", got)
 	}
 }
+
+func TestSelectByPath_VisibleNote(t *testing.T) {
+	nl := NewNoteList()
+	nl.SetSize(80, 40)
+	nl.SetItems(sampleItems())
+
+	// Select a note in an expanded folder
+	ok := nl.SelectByPath("go/backporting_deps.md")
+	if !ok {
+		t.Fatal("SelectByPath returned false for a visible note")
+	}
+
+	sel := nl.SelectedItem()
+	if sel == nil {
+		t.Fatal("expected selected item after SelectByPath")
+	}
+	if sel.Path != "go/backporting_deps.md" {
+		t.Errorf("expected path go/backporting_deps.md, got %s", sel.Path)
+	}
+}
+
+func TestSelectByPath_CollapsedFolder(t *testing.T) {
+	nl := NewNoteList()
+	nl.SetSize(80, 40)
+	nl.SetItems(sampleItems())
+
+	// Cursor starts at Dotcom folder (index 0). Collapse it.
+	nl.CollapseSelected()
+
+	// Notes inside Dotcom are now hidden. SelectByPath should expand it.
+	ok := nl.SelectByPath("dotcom/running_azure.md")
+	if !ok {
+		t.Fatal("SelectByPath returned false for a note in collapsed folder")
+	}
+
+	sel := nl.SelectedItem()
+	if sel == nil {
+		t.Fatal("expected selected item after SelectByPath on collapsed folder")
+	}
+	if sel.Path != "dotcom/running_azure.md" {
+		t.Errorf("expected path dotcom/running_azure.md, got %s", sel.Path)
+	}
+}
+
+func TestSelectByPath_Nonexistent(t *testing.T) {
+	nl := NewNoteList()
+	nl.SetSize(80, 40)
+	nl.SetItems(sampleItems())
+
+	ok := nl.SelectByPath("nonexistent/foo.md")
+	if ok {
+		t.Error("SelectByPath should return false for nonexistent path")
+	}
+}
+
+func TestSelectByPath_RootLevelNote(t *testing.T) {
+	nl := NewNoteList()
+	nl.SetSize(80, 40)
+	nl.SetItems(sampleItems())
+
+	ok := nl.SelectByPath("daily.md")
+	if !ok {
+		t.Fatal("SelectByPath returned false for a root-level note")
+	}
+
+	sel := nl.SelectedItem()
+	if sel == nil {
+		t.Fatal("expected selected item")
+	}
+	if sel.Path != "daily.md" {
+		t.Errorf("expected path daily.md, got %s", sel.Path)
+	}
+}
+
+func TestSelectByPath_NestedCollapsedFolder(t *testing.T) {
+	nl := NewNoteList()
+	nl.SetSize(80, 40)
+	nl.SetItems(sampleItems())
+
+	// Collapse "Projects" folder (contains "CodeCoverage" subfolder).
+	// Navigate to Projects folder node first.
+	for i := 0; i < len(nl.flatVisible); i++ {
+		if nl.flatVisible[i].isFolder && nl.flatVisible[i].name == "Projects" {
+			nl.cursor = i
+			break
+		}
+	}
+	nl.CollapseSelected()
+
+	// Notes inside Projects/CodeCoverage are now hidden.
+	ok := nl.SelectByPath("projects/codecoverage/e2e_stream.md")
+	if !ok {
+		t.Fatal("SelectByPath returned false for a note in nested collapsed folder")
+	}
+
+	sel := nl.SelectedItem()
+	if sel == nil {
+		t.Fatal("expected selected item")
+	}
+	if sel.Path != "projects/codecoverage/e2e_stream.md" {
+		t.Errorf("expected path projects/codecoverage/e2e_stream.md, got %s", sel.Path)
+	}
+}

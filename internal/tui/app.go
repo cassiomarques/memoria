@@ -996,7 +996,7 @@ func (a *App) cmdTodo(args []string) tea.Cmd {
 		Due:    dueDate,
 	}
 
-	_, err := a.svc.CreateTodo(opts)
+	n, err := a.svc.CreateTodo(opts)
 	if err != nil {
 		a.setMessage("Create todo failed: "+err.Error(), true)
 		return nil
@@ -1004,6 +1004,12 @@ func (a *App) cmdTodo(args []string) tea.Cmd {
 
 	_ = a.refreshNoteList()
 	a.refreshTags()
+	a.noteList.SelectByPath(n.Path)
+	if a.preview.Visible() {
+		if sel := a.noteList.SelectedItem(); sel != nil {
+			a.loadPreview(sel)
+		}
+	}
 	a.setMessage("⭕ Created todo: "+title, false)
 	return clearMessageCmd()
 }

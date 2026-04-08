@@ -189,6 +189,35 @@ func (n NoteList) SelectedItem() *NoteItem {
 // Cursor returns the current cursor position in the visible tree.
 func (n NoteList) Cursor() int { return n.cursor }
 
+// SelectByPath moves the cursor to the note with the given path.
+// If the note is inside a collapsed folder, the folder is expanded first.
+// Returns true if the note was found and selected.
+func (n *NoteList) SelectByPath(path string) bool {
+	// First, try to find it in the currently visible list
+	for i, node := range n.flatVisible {
+		if !node.isFolder && node.noteItem != nil && node.noteItem.Path == path {
+			n.cursor = i
+			n.ensureVisible()
+			return true
+		}
+	}
+
+	// Not visible — walk the tree to find the note and expand its parent folders.
+	if n.expandAncestorsOf(path) {
+		n.flatVisible = nil
+		n.rebuildFlatVisible()
+		for i, node := range n.flatVisible {
+			if !node.isFolder && node.noteItem != nil && node.noteItem.Path == path {
+				n.cursor = i
+				n.ensureVisible()
+				return true
+			}
+		}
+	}
+
+	return false
+}
+
 // SelectedIsFolder reports whether the cursor is on a folder node.
 func (n NoteList) SelectedIsFolder() bool {
 	if len(n.flatVisible) == 0 || n.cursor >= len(n.flatVisible) {
@@ -317,6 +346,26 @@ func (n *NoteList) walkTree(fn func(*treeNode)) {
 		}
 	}
 	walk(n.tree)
+}
+
+// expandAncestorsOf walks the tree to find a note by path and expands
+// all ancestor folders so it becomes visible. Returns true if the note exists.
+func (n *NoteList) expandAncestorsOf(path string) bool {
+	var search func([]*treeNode) bool
+	search = func(nodes []*treeNode) bool {
+		for _, node := range nodes {
+			if node.isFolder {
+				if search(node.children) {
+					node.expanded = true
+					return true
+				}
+			} else if node.noteItem != nil && node.noteItem.Path == path {
+				return true
+			}
+		}
+		return false
+	}
+	return search(n.tree)
 }
 
 func (n *NoteList) clampCursor() {
