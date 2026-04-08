@@ -1,6 +1,7 @@
 package components
 
 import (
+	"strings"
 	"testing"
 	"time"
 
@@ -304,12 +305,12 @@ func TestNoteList_GoToTop(t *testing.T) {
 func TestNoteList_CtrlD_PageDown(t *testing.T) {
 	nl := NewNoteList()
 	nl.SetItems(sampleItems())
-	nl.SetSize(80, 10) // 10 lines visible with linesPerItem=1
+	nl.SetSize(80, 10)
 
 	nl, _ = nl.Update(keyPress("ctrl+d"))
-	// Page down moves by visibleCount/2 = 10/2 = 5
-	if nl.Cursor() != 5 {
-		t.Errorf("expected cursor at 5, got %d", nl.Cursor())
+	// visibleCount=9 (10 minus 1 for scroll indicator), half-page = 9/2 = 4
+	if nl.Cursor() != 4 {
+		t.Errorf("expected cursor at 4, got %d", nl.Cursor())
 	}
 }
 
@@ -323,7 +324,7 @@ func TestNoteList_CtrlU_PageUp(t *testing.T) {
 	last := nl.Cursor()
 
 	nl, _ = nl.Update(keyPress("ctrl+u"))
-	expected := last - 5
+	expected := last - 4 // half-page = visibleCount/2 = 9/2 = 4
 	if nl.Cursor() != expected {
 		t.Errorf("expected cursor at %d, got %d", expected, nl.Cursor())
 	}
@@ -1728,5 +1729,24 @@ func TestSelectByPath_NestedCollapsedFolder(t *testing.T) {
 	}
 	if sel.Path != "projects/codecoverage/e2e_stream.md" {
 		t.Errorf("expected path projects/codecoverage/e2e_stream.md, got %s", sel.Path)
+	}
+}
+
+func TestNoteList_ViewFitsWithinHeight(t *testing.T) {
+	// When the note list has more items than fit in the allocated height,
+	// scroll indicators (▲/▼) are shown. The total View output must not
+	// exceed the allocated height, otherwise the status bar gets pushed
+	// off screen.
+	nl := NewNoteList()
+	height := 5 // small height that forces scrolling with sampleItems
+	nl.SetSize(80, height)
+	nl.SetItems(sampleItems())
+
+	view := nl.View()
+	lineCount := strings.Count(view, "\n") + 1
+
+	if lineCount > height {
+		t.Errorf("View output is %d lines but height budget is %d; status bar would be pushed off screen",
+			lineCount, height)
 	}
 }

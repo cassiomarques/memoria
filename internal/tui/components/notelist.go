@@ -497,6 +497,13 @@ func (n *NoteList) visibleCount() int {
 	if vc < 1 {
 		return 1
 	}
+	// Reserve 1 line for scroll indicators when the list overflows
+	if len(n.flatVisible) > vc {
+		vc--
+		if vc < 1 {
+			vc = 1
+		}
+	}
 	return vc
 }
 
