@@ -164,6 +164,8 @@ func (h *Handler) Dispatch(req Request) Response {
 		return h.handleSync(req)
 	case CmdNew:
 		return h.handleNew(req)
+	case CmdEdit:
+		return h.handleEdit(req)
 	case CmdTodo:
 		return h.handleTodo(req)
 	default:
@@ -267,6 +269,20 @@ func (h *Handler) handleNew(req Request) Response {
 		}
 	}
 	n, err := h.svc.Create(path, content, tags)
+	if err != nil {
+		return ErrResponse(err.Error())
+	}
+	h.callOnWrite()
+	return OKResponse(n.Path)
+}
+
+func (h *Handler) handleEdit(req Request) Response {
+	path := req.Args["path"]
+	if err := validatePath(path); err != nil {
+		return ErrResponse("edit: " + err.Error())
+	}
+	content := req.Args["content"]
+	n, err := h.svc.Edit(path, content)
 	if err != nil {
 		return ErrResponse(err.Error())
 	}

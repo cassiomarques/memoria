@@ -11,6 +11,7 @@ const (
 	CmdCat    = "cat"
 	CmdSync   = "sync"
 	CmdNew    = "new"
+	CmdEdit   = "edit"
 	CmdTodo   = "todo"
 )
 

@@ -268,6 +268,23 @@ EOF
 cat draft.md | memoria new final/report.md
 ```
 
+#### `memoria edit <path>`
+
+Update the content of an existing note. The new content is read from stdin. Frontmatter metadata (tags, dates) is preserved. Fails if the note does not exist.
+
+```bash
+echo "# Updated Content" | memoria edit ideas/cool-project.md
+
+# Rewrite a note from a file
+cat revised.md | memoria edit reports/quarterly.md
+
+# Using a here-doc
+memoria edit logs/deploy.md <<EOF
+# Deploy Log (Updated)
+Rolled back v2.3.1 due to errors
+EOF
+```
+
 #### `memoria todo <title> [--folder F] [--tags t1,t2]`
 
 Create a new todo note. The title is slugified into a filename (e.g. "Buy groceries" → `buy-groceries.md`). Defaults to the `TODO/` folder.
@@ -401,6 +418,7 @@ To use a custom notes directory:
 | `tags` | List all tags with note counts |
 | `todos` | List todos, optionally filtered (overdue/today/pending/done) |
 | `new` | Create a new note with optional content and tags |
+| `edit` | Update the content of an existing note |
 | `todo` | Create a new todo |
 | `sync` | Sync notes with the git remote |
 

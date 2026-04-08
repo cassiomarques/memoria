@@ -212,6 +212,43 @@ func (s *NoteService) Create(path string, content string, tags []string) (*note.
 	return n, nil
 }
 
+// Edit updates the content of an existing note, preserving its frontmatter
+// metadata (tags, dates, etc.). Returns an error if the note does not exist.
+func (s *NoteService) Edit(path string, content string) (*note.Note, error) {
+	path = ensureMD(path)
+
+	if !s.files.Exists(path) {
+		return nil, fmt.Errorf("note not found: %s", path)
+	}
+
+	// Load the existing note to preserve frontmatter
+	n, err := s.files.Load(path)
+	if err != nil {
+		return nil, fmt.Errorf("loading note: %w", err)
+	}
+
+	n.Content = content
+	n.Modified = time.Now()
+
+	if err := s.files.Save(n); err != nil {
+		return nil, fmt.Errorf("saving note: %w", err)
+	}
+
+	if err := s.meta.UpsertNote(n); err != nil {
+		return nil, fmt.Errorf("upserting metadata: %w", err)
+	}
+
+	if s.search != nil {
+		if err := s.search.Index(n); err != nil {
+			return nil, fmt.Errorf("indexing note: %w", err)
+		}
+	}
+
+	s.requestSync("edit " + path)
+
+	return n, nil
+}
+
 // Open loads a note from disk for viewing/editing.
 // If the note lacks YAML frontmatter, it adds it and persists the change.
 func (s *NoteService) Open(path string) (*note.Note, error) {

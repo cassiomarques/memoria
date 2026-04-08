@@ -395,6 +395,7 @@ func TestToolsList(t *testing.T) {
 		"tags":   false,
 		"todos":  false,
 		"new":    false,
+		"edit":   false,
 		"todo":   false,
 		"sync":   false,
 	}
@@ -409,5 +410,60 @@ func TestToolsList(t *testing.T) {
 		if !found {
 			t.Errorf("expected tool %q not found in list", name)
 		}
+	}
+}
+
+func TestEdit(t *testing.T) {
+	cs := testSetup(t)
+
+	// Create a note first
+	result := callTool(t, cs, "new", map[string]any{
+		"path":    "editable.md",
+		"content": "original content",
+	})
+	if result.IsError {
+		t.Fatalf("new failed: %s", resultText(t, result))
+	}
+
+	// Edit it
+	result = callTool(t, cs, "edit", map[string]any{
+		"path":    "editable.md",
+		"content": "updated via MCP",
+	})
+	if result.IsError {
+		t.Fatalf("edit failed: %s", resultText(t, result))
+	}
+
+	// Verify via cat
+	result = callTool(t, cs, "cat", map[string]any{"path": "editable.md"})
+	if result.IsError {
+		t.Fatalf("cat after edit failed: %s", resultText(t, result))
+	}
+	text := resultText(t, result)
+	if !strings.Contains(text, "updated via MCP") {
+		t.Errorf("expected updated content, got: %s", text)
+	}
+}
+
+func TestEdit_Nonexistent(t *testing.T) {
+	cs := testSetup(t)
+
+	result := callTool(t, cs, "edit", map[string]any{
+		"path":    "does-not-exist.md",
+		"content": "some content",
+	})
+	if !result.IsError {
+		t.Fatal("expected error when editing nonexistent note")
+	}
+}
+
+func TestEdit_NoPath(t *testing.T) {
+	cs := testSetup(t)
+
+	result := callTool(t, cs, "edit", map[string]any{
+		"content": "some content",
+	})
+	if !result.IsError {
+		t.Fatal("expected error for missing path")
 	}
 }

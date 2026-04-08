@@ -484,3 +484,60 @@ func TestPathValidation(t *testing.T) {
 		})
 	}
 }
+
+func TestRoundTrip_Edit(t *testing.T) {
+	env := setupTestEnv(t)
+
+	// Create a note first
+	_, err := env.svc.Create("editable.md", "original content", []string{"test"})
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+
+	env.startServer(t)
+	client := env.dial(t)
+
+	resp, err := client.Send(ipc.Request{
+		Command: ipc.CmdEdit,
+		Args: map[string]string{
+			"path":    "editable.md",
+			"content": "updated via IPC",
+		},
+	})
+	if err != nil {
+		t.Fatalf("Send: %v", err)
+	}
+	if !resp.OK {
+		t.Fatalf("expected OK, got error: %s", resp.Error)
+	}
+
+	// Verify content was updated
+	n, err := env.svc.Get("editable.md")
+	if err != nil {
+		t.Fatalf("Get after edit: %v", err)
+	}
+	if !strings.Contains(n.Content, "updated via IPC") {
+		t.Errorf("expected updated content, got: %s", n.Content)
+	}
+}
+
+func TestRoundTrip_Edit_Nonexistent(t *testing.T) {
+	env := setupTestEnv(t)
+
+	env.startServer(t)
+	client := env.dial(t)
+
+	resp, err := client.Send(ipc.Request{
+		Command: ipc.CmdEdit,
+		Args: map[string]string{
+			"path":    "does-not-exist.md",
+			"content": "some content",
+		},
+	})
+	if err != nil {
+		t.Fatalf("Send: %v", err)
+	}
+	if resp.OK {
+		t.Fatal("expected error when editing nonexistent note")
+	}
+}

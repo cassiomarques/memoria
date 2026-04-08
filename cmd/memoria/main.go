@@ -27,7 +27,7 @@ var version = "dev"
 // knownSubcommands lists the CLI commands that bypass the TUI.
 var knownSubcommands = map[string]bool{
 	"search": true, "list": true, "tags": true, "todos": true,
-	"cat": true, "sync": true, "new": true, "todo": true,
+	"cat": true, "sync": true, "new": true, "edit": true, "todo": true,
 	"mcp": true,
 }
 
@@ -103,6 +103,7 @@ Commands:
   cat <path>              Print note content to stdout
   sync                    Sync notes (git pull + reindex + commit + push)
   new <path> [--tags t]   Create a new note
+  edit <path>             Update an existing note (content from stdin)
   todo <title> [opts]     Create a new todo (--folder F, --tags t1,t2)
   mcp                     Start the MCP server (stdio transport)
   help                    Show this help
@@ -308,6 +309,15 @@ func buildRequest(command string, args []string) ipc.Request {
 				req.Args["tags"] = args[i+1]
 				i++
 			}
+		}
+		if content := readStdin(); content != "" {
+			req.Args["content"] = content
+		}
+	case "edit":
+		// memoria edit <path>
+		// Content is read from stdin
+		if len(args) > 0 {
+			req.Args["path"] = args[0]
 		}
 		if content := readStdin(); content != "" {
 			req.Args["content"] = content

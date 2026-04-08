@@ -1377,3 +1377,67 @@ func TestCreateTodo_EmptyTitle(t *testing.T) {
 		t.Error("expected error for empty title")
 	}
 }
+
+func TestEdit(t *testing.T) {
+	svc := setupService(t)
+
+	// Create a note first
+	_, err := svc.Create("work/notes", "original content", []string{"work"})
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+
+	// Edit it
+	n, err := svc.Edit("work/notes.md", "updated content")
+	if err != nil {
+		t.Fatalf("Edit: %v", err)
+	}
+
+	if n.Content != "updated content" {
+		t.Errorf("expected content 'updated content', got %q", n.Content)
+	}
+
+	// Verify on disk via Get
+	got, err := svc.Get("work/notes.md")
+	if err != nil {
+		t.Fatalf("Get after edit: %v", err)
+	}
+	if got.Content != "updated content" {
+		t.Errorf("expected content on disk 'updated content', got %q", got.Content)
+	}
+
+	// Tags should be preserved
+	nm, err := svc.meta.GetNote("work/notes.md")
+	if err != nil {
+		t.Fatalf("GetNote: %v", err)
+	}
+	if len(nm.Tags) != 1 || nm.Tags[0] != "work" {
+		t.Errorf("expected tags preserved [work], got %v", nm.Tags)
+	}
+}
+
+func TestEdit_NonexistentFails(t *testing.T) {
+	svc := setupService(t)
+
+	_, err := svc.Edit("does/not/exist.md", "content")
+	if err == nil {
+		t.Error("expected error when editing nonexistent note")
+	}
+}
+
+func TestEdit_AppendsMDExtension(t *testing.T) {
+	svc := setupService(t)
+
+	_, err := svc.Create("myfile", "original", nil)
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+
+	n, err := svc.Edit("myfile", "edited")
+	if err != nil {
+		t.Fatalf("Edit: %v", err)
+	}
+	if n.Path != "myfile.md" {
+		t.Errorf("expected path myfile.md, got %s", n.Path)
+	}
+}

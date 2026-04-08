@@ -91,6 +91,11 @@ func (s *Server) registerTools() {
 	}, s.handleNew)
 
 	mcp.AddTool(s.server, &mcp.Tool{
+		Name:        "edit",
+		Description: "Update the content of an existing note. Fails if the note does not exist.",
+	}, s.handleEdit)
+
+	mcp.AddTool(s.server, &mcp.Tool{
 		Name:        "todo",
 		Description: "Create a new todo with a title, optional folder, and optional tags.",
 	}, s.handleTodo)
@@ -124,6 +129,11 @@ type newInput struct {
 	Path    string `json:"path" jsonschema:"Relative path for the new note (e.g. Projects/new-idea.md)."`
 	Content string `json:"content,omitempty" jsonschema:"Markdown content for the note body."`
 	Tags    string `json:"tags,omitempty" jsonschema:"Comma-separated tags (e.g. golang,tui)."`
+}
+
+type editInput struct {
+	Path    string `json:"path" jsonschema:"Relative path of the note to edit (e.g. Projects/ideas.md)."`
+	Content string `json:"content" jsonschema:"New markdown content for the note body."`
 }
 
 type todoInput struct {
@@ -185,6 +195,17 @@ func (s *Server) handleNew(ctx context.Context, _ *mcp.CallToolRequest, input ne
 	defer s.writeMu.Unlock()
 
 	return s.runWithStdin(ctx, defaultTimeout, input.Content, args...)
+}
+
+func (s *Server) handleEdit(ctx context.Context, _ *mcp.CallToolRequest, input editInput) (*mcp.CallToolResult, any, error) {
+	if input.Path == "" {
+		return errResult("edit requires a path"), nil, nil
+	}
+
+	s.writeMu.Lock()
+	defer s.writeMu.Unlock()
+
+	return s.runWithStdin(ctx, defaultTimeout, input.Content, "edit", input.Path)
 }
 
 func (s *Server) handleTodo(ctx context.Context, _ *mcp.CallToolRequest, input todoInput) (*mcp.CallToolResult, any, error) {
