@@ -365,7 +365,7 @@ This starts the MCP server on stdio (stdin/stdout). You don't typically run this
 
 ### Configuring with GitHub Copilot CLI
 
-Add to your [MCP configuration](https://docs.github.com/en/copilot/using-github-copilot/using-copilot-coding-agent/using-mcp-servers-with-copilot-coding-agent):
+Add to your [MCP configuration](https://docs.github.com/en/copilot/how-tos/copilot-cli/customize-copilot/add-mcp-servers):
 
 ```json
 {
