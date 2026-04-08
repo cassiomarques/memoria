@@ -53,6 +53,11 @@ type clearMessageMsg struct{}
 // refreshTickMsg triggers a periodic re-render so relative timestamps stay fresh.
 type refreshTickMsg struct{}
 
+// ExternalRefreshMsg is sent by the IPC server (via tea.Program.Send) when a
+// CLI command mutates data. The TUI handles it by refreshing the note list and
+// tags — the same way it refreshes after an internal write operation.
+type ExternalRefreshMsg struct{}
+
 // gitSyncMsg is sent when the background git sync worker completes a commit+push.
 // A nil Err means the push succeeded; non-nil means it failed (data is safe locally).
 type gitSyncMsg struct {
@@ -202,6 +207,14 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// No state change needed — returning triggers View() which recalculates
 		// relative timestamps. Schedule the next tick.
 		return a, refreshTickCmd()
+
+	case ExternalRefreshMsg:
+		// An external CLI command mutated data. Refresh the note list and tags
+		// so the TUI reflects the changes immediately.
+		_ = a.refreshNoteList()
+		a.refreshTags()
+		a.setMessage("Refreshed (external change)", false)
+		return a, clearMessageCmd()
 
 	case gitSyncMsg:
 		// The background git worker finished a commit+push cycle.

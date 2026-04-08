@@ -18,6 +18,7 @@ Memoria keeps your notes as plain Markdown files organized in folders, indexes t
 - **Tagging** — Add and remove tags at any time. Search and filter by tag.
 - **Your editor** — Opens `$EDITOR` (or vim) for editing. Memoria handles the rest.
 - **Beautiful TUI** — Catppuccin theme (dark/light), markdown preview, vim-style navigation.
+- **CLI subcommands** — `memoria search`, `memoria list`, `memoria tags`, etc. for scripting and AI assistant integration.
 - **Single binary** — Pure Go, no CGO, no external dependencies.
 
 ## Installation
@@ -152,6 +153,52 @@ Type `:` to open the command bar. Tab completion is available for paths, folders
 | `fixfm` | `:fixfm` | Add frontmatter to notes missing it |
 | `help` | `:help` | Show help |
 | `quit` | `:quit` | Exit memoria |
+
+## CLI Subcommands
+
+Memoria can also be used from the command line without opening the TUI. This is useful for scripting, piping, and AI assistant integration (e.g. GitHub Copilot CLI).
+
+```bash
+memoria search "database"       # Full-text search
+memoria list                    # List all notes
+memoria list Projects           # List notes in a folder
+memoria tags                    # Show all tags
+memoria todos                   # Show all todos
+memoria todos overdue           # Show overdue todos
+memoria cat daily.md            # Print note content
+memoria sync                    # Sync with git remote
+memoria new ideas/cool.md       # Create a note
+memoria todo "Buy milk"         # Create a todo
+```
+
+### How it works
+
+When the TUI is running, CLI commands communicate with it via a local Unix socket. This means:
+
+- **Full Bleve search** — CLI gets the same powerful search as the TUI
+- **Auto-refresh** — The TUI updates automatically when the CLI creates or syncs notes
+
+When no TUI is running, commands open the stores directly with full functionality.
+
+### Flags
+
+| Flag | Description |
+|------|-------------|
+| `--json` | Output structured JSON (for scripting / AI tools) |
+| `--home <dir>` | Use a custom config/data directory |
+
+### Examples with Copilot CLI
+
+```bash
+# Search notes and pipe to another tool
+memoria search "meeting notes" --json | jq '.[].Path'
+
+# Create a note from a script
+memoria new "logs/deploy-$(date +%Y%m%d).md" --tags deploy,logs
+
+# Check overdue todos
+memoria todos overdue --json
+```
 
 ## Configuration
 
