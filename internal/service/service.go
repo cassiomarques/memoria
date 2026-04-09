@@ -855,6 +855,37 @@ func (s *NoteService) ToggleTodoDone(path string) (bool, error) {
 	return n.Done, nil
 }
 
+// SetTodoDue updates the due date of a todo note. Pass nil to clear the due date.
+func (s *NoteService) SetTodoDue(path string, due *time.Time) error {
+	path = ensureMD(path)
+
+	n, err := s.files.Load(path)
+	if err != nil {
+		return fmt.Errorf("loading note: %w", err)
+	}
+	if !n.Todo {
+		return fmt.Errorf("%q is not a todo", path)
+	}
+
+	n.Due = due
+	n.Modified = time.Now()
+
+	if err := s.files.Save(n); err != nil {
+		return fmt.Errorf("saving note: %w", err)
+	}
+	if err := s.meta.UpsertNote(n); err != nil {
+		return fmt.Errorf("upserting metadata: %w", err)
+	}
+	if s.search != nil {
+		if err := s.search.Index(n); err != nil {
+			return fmt.Errorf("indexing note: %w", err)
+		}
+	}
+	s.requestSync("set due " + path)
+
+	return nil
+}
+
 // ListTodos returns all todo notes from the metadata store, sorted by due date.
 func (s *NoteService) ListTodos() ([]*storage.NoteMeta, error) {
 	return s.meta.ListTodos()

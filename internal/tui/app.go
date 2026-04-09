@@ -897,6 +897,8 @@ func (a *App) executeCommand(cmd *Command) tea.Cmd {
 		return a.cmdTags()
 	case "todo":
 		return a.cmdTodo(cmd.Args)
+	case "todo-due":
+		return a.cmdTodoDue(cmd.Args)
 	case "todos":
 		return a.cmdTodos(strings.Join(cmd.Args, " "))
 	case "sync":
@@ -1017,6 +1019,53 @@ func (a *App) cmdTodo(args []string) tea.Cmd {
 		}
 	}
 	a.setMessage("⭕ Created todo: "+title, false)
+	return clearMessageCmd()
+}
+
+// cmdTodoDue sets or clears the due date of the currently selected todo.
+// Syntax: :todo-due <YYYY-MM-DD> or :todo-due clear
+func (a *App) cmdTodoDue(args []string) tea.Cmd {
+	if len(args) == 0 {
+		a.setMessage("Usage: todo-due <YYYY-MM-DD> or todo-due clear", true)
+		return nil
+	}
+
+	sel := a.noteList.SelectedItem()
+	if sel == nil {
+		a.setMessage("No note selected", true)
+		return nil
+	}
+	if !sel.Todo {
+		a.setMessage("Selected note is not a todo", true)
+		return nil
+	}
+
+	var due *time.Time
+	if !strings.EqualFold(args[0], "clear") {
+		t, err := time.Parse(time.DateOnly, args[0])
+		if err != nil {
+			a.setMessage("Invalid date (use YYYY-MM-DD): "+args[0], true)
+			return nil
+		}
+		due = &t
+	}
+
+	if a.svc == nil {
+		a.setMessage("No service configured", true)
+		return nil
+	}
+
+	if err := a.svc.SetTodoDue(sel.Path, due); err != nil {
+		a.setMessage("Set due date failed: "+err.Error(), true)
+		return nil
+	}
+
+	_ = a.refreshNoteList()
+	if due != nil {
+		a.setMessage("📅 Due date set: "+due.Format(time.DateOnly), false)
+	} else {
+		a.setMessage("📅 Due date cleared", false)
+	}
 	return clearMessageCmd()
 }
 

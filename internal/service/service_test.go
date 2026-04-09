@@ -1421,6 +1421,60 @@ func TestCreateTodo_EmptyTitle(t *testing.T) {
 	}
 }
 
+func TestSetTodoDue(t *testing.T) {
+	svc := setupService(t)
+
+	_, err := svc.CreateTodo(CreateTodoOptions{
+		Title:  "task with due",
+		Folder: "TODO",
+	})
+	if err != nil {
+		t.Fatalf("CreateTodo: %v", err)
+	}
+
+	// Set a due date
+	due := time.Date(2026, 6, 15, 0, 0, 0, 0, time.UTC)
+	if err := svc.SetTodoDue("TODO/task-with-due.md", &due); err != nil {
+		t.Fatalf("SetTodoDue: %v", err)
+	}
+
+	n, err := svc.Get("TODO/task-with-due.md")
+	if err != nil {
+		t.Fatalf("Get: %v", err)
+	}
+	if n.Due == nil || n.Due.Format(time.DateOnly) != "2026-06-15" {
+		t.Errorf("expected due=2026-06-15, got %v", n.Due)
+	}
+
+	// Clear the due date
+	if err := svc.SetTodoDue("TODO/task-with-due.md", nil); err != nil {
+		t.Fatalf("SetTodoDue(clear): %v", err)
+	}
+
+	n, err = svc.Get("TODO/task-with-due.md")
+	if err != nil {
+		t.Fatalf("Get: %v", err)
+	}
+	if n.Due != nil {
+		t.Errorf("expected due=nil after clear, got %v", n.Due)
+	}
+}
+
+func TestSetTodoDue_NonTodo(t *testing.T) {
+	svc := setupService(t)
+
+	_, err := svc.Create("regular/note.md", "content", nil)
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+
+	due := time.Date(2026, 6, 15, 0, 0, 0, 0, time.UTC)
+	err = svc.SetTodoDue("regular/note.md", &due)
+	if err == nil {
+		t.Error("expected error when setting due date on non-todo")
+	}
+}
+
 func TestEdit(t *testing.T) {
 	svc := setupService(t)
 

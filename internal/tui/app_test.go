@@ -696,6 +696,40 @@ func TestCmdTodos_NoService(t *testing.T) {
 	}
 }
 
+func TestCmdTodoDue_NoArgs(t *testing.T) {
+	a := newTestApp()
+	a.cmdTodoDue(nil)
+	msg := a.statusBar.Message()
+	if !strings.Contains(msg, "Usage") {
+		t.Errorf("expected usage message, got %q", msg)
+	}
+}
+
+func TestCmdTodoDue_NotATodo(t *testing.T) {
+	a := newTestApp()
+	// Set items with a regular note at root level (cursor 0 lands on it)
+	a.noteList.SetItems([]components.NoteItem{
+		{Path: "note.md", Title: "regular note", Folder: ""},
+	})
+	a.cmdTodoDue([]string{"2026-06-15"})
+	msg := a.statusBar.Message()
+	if !strings.Contains(msg, "not a todo") {
+		t.Errorf("expected 'not a todo' error, got %q", msg)
+	}
+}
+
+func TestCmdTodoDue_InvalidDate(t *testing.T) {
+	a := newTestApp()
+	a.noteList.SetItems([]components.NoteItem{
+		{Path: "task.md", Title: "task", Folder: "", Todo: true},
+	})
+	a.cmdTodoDue([]string{"not-a-date"})
+	msg := a.statusBar.Message()
+	if !strings.Contains(msg, "Invalid date") {
+		t.Errorf("expected 'Invalid date' error, got %q", msg)
+	}
+}
+
 func TestApp_ResizeComponents_DynamicHeaderHeight(t *testing.T) {
 	// At narrow widths, the ASCII art header wraps and becomes taller.
 	// resizeComponents must measure the actual header height so the note
