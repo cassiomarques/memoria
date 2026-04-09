@@ -1617,9 +1617,11 @@ func (a *App) cmdHelp() {
 | **ls** [folder] | List notes (optionally in a folder) |
 | **cd** [folder] | Change current folder |
 | **mv** *old* *new* | Move/rename a note |
+| **rename** *new-name* | Rename selected note (stays in same folder) |
 | **rm** *path* | Delete a note |
 | **tags** | Show all tags |
 | **todo** *title* [#tag] [@due(YYYY-MM-DD)] [--folder *path*] | Create a todo note |
+| **todo-due** *YYYY-MM-DD* / **clear** | Set or clear due date on selected todo |
 | **todos** | Show all todos sorted by due date |
 | **sync** | Sync with git remote |
 | **remote** *url* | Set git remote and pull notes |

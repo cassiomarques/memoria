@@ -165,9 +165,11 @@ Type `:` to open the command bar. Tab completion is available for paths, folders
 | `ls` | `:ls [folder]` | List notes (optionally in a folder) |
 | `cd` | `:cd [folder]` | Change folder context (`/` for root) |
 | `mv` | `:mv <old> <new>` | Move or rename a note |
+| `rename` | `:rename <new-name>` | Rename selected note (stays in same folder) |
 | `rm` | `:rm <path>` | Delete a note |
 | `tags` | `:tags` | Show all tags with note counts |
 | `todo` | `:todo <title> [#tag] [@due(YYYY-MM-DD)] [--folder <path>]` | Create a todo note |
+| `todo-due` | `:todo-due <YYYY-MM-DD>` or `:todo-due clear` | Set or clear due date on selected todo |
 | `todos` | `:todos` | Show all todos sorted by due date |
 | `sync` | `:sync` | Pull from remote and reload all notes |
 | `remote` | `:remote <git-url>` | Configure git remote |
