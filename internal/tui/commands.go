@@ -16,7 +16,7 @@ type Command struct {
 
 // commandNames is the list of all recognized command names.
 var commandNames = []string{
-	"new", "open", "search", "recent", "all", "tag", "untag", "ls", "cd", "mv", "rm", "tags", "todo", "todo-due", "todos", "sync", "remote", "fixfm", "help", "quit", "q",
+	"new", "open", "search", "recent", "all", "tag", "untag", "ls", "cd", "mv", "rename", "rm", "tags", "todo", "todo-due", "todos", "sync", "remote", "fixfm", "help", "quit", "q",
 }
 
 // ParseCommand parses raw command-bar input into a Command.

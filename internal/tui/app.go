@@ -3,6 +3,7 @@ package tui
 import (
 	"fmt"
 	"os/exec"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -891,6 +892,8 @@ func (a *App) executeCommand(cmd *Command) tea.Cmd {
 		return a.cmdCd(cmd.Args)
 	case "mv":
 		return a.cmdMv(cmd.Args)
+	case "rename":
+		return a.cmdRename(cmd.Args)
 	case "rm":
 		return a.cmdRm(cmd.Args)
 	case "tags":
@@ -1307,6 +1310,49 @@ func (a *App) cmdMv(args []string) tea.Cmd {
 
 	a.setMessage(fmt.Sprintf("Moved %s → %s", args[0], args[1]), false)
 	return nil
+}
+
+// cmdRename renames the currently selected note, keeping it in the same folder.
+// Syntax: :rename <new-name>
+func (a *App) cmdRename(args []string) tea.Cmd {
+	if len(args) == 0 {
+		a.setMessage("Usage: rename <new-name>", true)
+		return nil
+	}
+
+	sel := a.noteList.SelectedItem()
+	if sel == nil {
+		a.setMessage("No note selected", true)
+		return nil
+	}
+
+	if a.svc == nil {
+		a.setMessage("No service configured", true)
+		return nil
+	}
+
+	folder := filepath.Dir(sel.Path)
+	newName := strings.Join(args, " ")
+	if !strings.HasSuffix(newName, ".md") {
+		newName += ".md"
+	}
+
+	var newPath string
+	if folder == "." {
+		newPath = newName
+	} else {
+		newPath = filepath.Join(folder, newName)
+	}
+
+	if err := a.svc.Move(sel.Path, newPath); err != nil {
+		a.setMessage("Rename failed: "+err.Error(), true)
+		return clearMessageCmd()
+	}
+
+	_ = a.refreshNoteList()
+	a.noteList.SelectByPath(newPath)
+	a.setMessage(fmt.Sprintf("Renamed → %s", newPath), false)
+	return clearMessageCmd()
 }
 
 func (a *App) cmdRm(args []string) tea.Cmd {

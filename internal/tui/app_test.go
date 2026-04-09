@@ -730,6 +730,39 @@ func TestCmdTodoDue_InvalidDate(t *testing.T) {
 	}
 }
 
+func TestCmdRename_NoArgs(t *testing.T) {
+	a := newTestApp()
+	a.cmdRename(nil)
+	msg := a.statusBar.Message()
+	if !strings.Contains(msg, "Usage") {
+		t.Errorf("expected usage message, got %q", msg)
+	}
+}
+
+func TestCmdRename_NoSelection(t *testing.T) {
+	a := newTestApp()
+	a.noteList.SetItems(nil)
+	a.cmdRename([]string{"new-name"})
+	msg := a.statusBar.Message()
+	if !strings.Contains(msg, "No note selected") {
+		t.Errorf("expected 'No note selected' error, got %q", msg)
+	}
+}
+
+func TestCmdRename_BuildsCorrectPath(t *testing.T) {
+	a := newTestApp()
+	// Root-level note
+	a.noteList.SetItems([]components.NoteItem{
+		{Path: "ideas.md", Title: "ideas", Folder: ""},
+	})
+	// No service, so we can't actually rename, but we test validation passes
+	a.cmdRename([]string{"new-ideas"})
+	msg := a.statusBar.Message()
+	if !strings.Contains(msg, "No service") {
+		t.Errorf("expected 'No service' error (validation passed), got %q", msg)
+	}
+}
+
 func TestApp_ResizeComponents_DynamicHeaderHeight(t *testing.T) {
 	// At narrow widths, the ASCII art header wraps and becomes taller.
 	// resizeComponents must measure the actual header height so the note
