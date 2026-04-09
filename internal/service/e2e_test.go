@@ -75,7 +75,7 @@ func TestE2E_FullLifecycle(t *testing.T) {
 			t.Fatalf("WriteFile: %v", err)
 		}
 
-		changed, err := svc.AfterEdit(notePath)
+		changed, err := svc.AfterEdit(notePath, "")
 		if err != nil {
 			t.Fatalf("AfterEdit: %v", err)
 		}
@@ -700,7 +700,7 @@ func TestE2E_GitCommitHistory(t *testing.T) {
 			t.Fatalf("WriteFile: %v", err)
 		}
 
-		changed, err := svc.AfterEdit("git-test.md")
+		changed, err := svc.AfterEdit("git-test.md", "")
 		if err != nil {
 			t.Fatalf("AfterEdit: %v", err)
 		}

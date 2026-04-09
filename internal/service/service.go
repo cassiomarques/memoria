@@ -1,6 +1,8 @@
 package service
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -285,13 +287,35 @@ func (s *NoteService) Open(path string) (*note.Note, error) {
 	return n, nil
 }
 
+// FileHash returns the hex-encoded SHA-256 hash of the raw file content
+// for the given note path. Use this before opening the editor to capture
+// a snapshot, then pass the result to AfterEdit for change detection.
+func (s *NoteService) FileHash(path string) (string, error) {
+	path = ensureMD(path)
+	data, err := os.ReadFile(s.files.AbsPath(path))
+	if err != nil {
+		return "", fmt.Errorf("reading file for hash: %w", err)
+	}
+	sum := sha256.Sum256(data)
+	return hex.EncodeToString(sum[:]), nil
+}
+
 // AfterEdit reloads a note from disk, updates metadata and search index,
 // and commits if content changed. Returns true if the file was modified.
-func (s *NoteService) AfterEdit(path string) (bool, error) {
+// preEditHash is the hex SHA-256 of the file before the editor was opened;
+// if the current file hashes to the same value, no save or sync is performed.
+func (s *NoteService) AfterEdit(path string, preEditHash string) (bool, error) {
 	path = ensureMD(path)
 
-	// We always reload — the caller is responsible for checking the hash
-	// before and after editing. We detect changes via git.
+	// Check whether the file actually changed.
+	currentHash, err := s.FileHash(path)
+	if err != nil {
+		return false, fmt.Errorf("computing post-edit hash: %w", err)
+	}
+	if preEditHash != "" && currentHash == preEditHash {
+		return false, nil
+	}
+
 	n, err := s.files.Load(path)
 	if err != nil {
 		return false, fmt.Errorf("reloading note: %w", err)

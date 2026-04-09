@@ -145,14 +145,19 @@ func TestAfterEdit(t *testing.T) {
 		t.Fatalf("Create: %v", err)
 	}
 
-	// Simulate editing the file on disk
+	// Capture real pre-edit hash, then simulate editing the file on disk
+	preHash, err := svc.FileHash("editable.md")
+	if err != nil {
+		t.Fatalf("FileHash: %v", err)
+	}
+
 	absPath := svc.files.AbsPath("editable.md")
 	newContent := "---\ntags:\n    - v1\n    - v2\ncreated: " + time.Now().Format(time.RFC3339) + "\nmodified: " + time.Now().Format(time.RFC3339) + "\n---\nEdited content"
 	if err := os.WriteFile(absPath, []byte(newContent), 0o644); err != nil {
 		t.Fatalf("writing edited content: %v", err)
 	}
 
-	changed, err := svc.AfterEdit("editable.md")
+	changed, err := svc.AfterEdit("editable.md", preHash)
 	if err != nil {
 		t.Fatalf("AfterEdit: %v", err)
 	}
@@ -205,7 +210,7 @@ func TestAfterEdit_UpdatesModifiedTimestamp(t *testing.T) {
 		t.Fatalf("writing edited content: %v", err)
 	}
 
-	_, err = svc.AfterEdit("timestamped.md")
+	_, err = svc.AfterEdit("timestamped.md", "")
 	if err != nil {
 		t.Fatalf("AfterEdit: %v", err)
 	}
@@ -237,6 +242,44 @@ func TestAfterEdit_UpdatesModifiedTimestamp(t *testing.T) {
 	if !nm.Modified.After(backdated) {
 		t.Errorf("expected metadata Modified to advance: backdated=%v, got=%v",
 			backdated, nm.Modified)
+	}
+}
+
+func TestAfterEdit_NoChangeSkipsSave(t *testing.T) {
+	svc := setupService(t)
+
+	_, err := svc.Create("noop.md", "Unchanged content", []string{"stable"})
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+
+	// Capture the file bytes and hash before the simulated editor open
+	absPath := svc.files.AbsPath("noop.md")
+	beforeBytes, err := os.ReadFile(absPath)
+	if err != nil {
+		t.Fatalf("reading file: %v", err)
+	}
+	preHash, err := svc.FileHash("noop.md")
+	if err != nil {
+		t.Fatalf("FileHash: %v", err)
+	}
+
+	// Simulate editor open+close with no changes (or :wq with no edits)
+	changed, err := svc.AfterEdit("noop.md", preHash)
+	if err != nil {
+		t.Fatalf("AfterEdit: %v", err)
+	}
+	if changed {
+		t.Error("expected AfterEdit to report no changes")
+	}
+
+	// Verify the file on disk was NOT rewritten (bytes identical)
+	afterBytes, err := os.ReadFile(absPath)
+	if err != nil {
+		t.Fatalf("reading file after: %v", err)
+	}
+	if string(beforeBytes) != string(afterBytes) {
+		t.Error("expected file bytes to remain identical when no changes were made")
 	}
 }
 

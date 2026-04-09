@@ -37,8 +37,9 @@ const (
 
 // editorFinishedMsg is sent when an external editor process completes.
 type editorFinishedMsg struct {
-	path string
-	err  error
+	path        string
+	preEditHash string
+	err         error
 }
 
 // commandResultMsg is sent when a command completes with a status message.
@@ -175,10 +176,10 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.err != nil {
 			a.setMessage("Editor error: "+msg.err.Error(), true)
 		} else if a.svc != nil {
-			_, err := a.svc.AfterEdit(msg.path)
+			changed, err := a.svc.AfterEdit(msg.path, msg.preEditHash)
 			if err != nil {
 				a.setMessage("After edit error: "+err.Error(), true)
-			} else {
+			} else if changed {
 				a.setMessage("Edited: "+msg.path, false)
 				_ = a.refreshNoteList()
 				// Refresh preview if we edited the previewed note
@@ -1588,6 +1589,9 @@ func (a *App) openInEditor(notePath string, lineNum int) tea.Cmd {
 		notePath += ".md"
 	}
 
+	// Snapshot content hash before editing for change detection.
+	preHash, _ := a.svc.FileHash(notePath)
+
 	absPath := a.svc.AbsPath(notePath)
 	editorCmd := a.svc.EditorCommand()
 	if editorCmd == "" {
@@ -1604,7 +1608,7 @@ func (a *App) openInEditor(notePath string, lineNum int) tea.Cmd {
 
 	path := notePath
 	return tea.ExecProcess(c, func(err error) tea.Msg {
-		return editorFinishedMsg{path: path, err: err}
+		return editorFinishedMsg{path: path, preEditHash: preHash, err: err}
 	})
 }
 
