@@ -13,6 +13,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 	"github.com/cassiomarques/memoria/internal/note"
+	"github.com/cassiomarques/memoria/internal/search"
 	"github.com/cassiomarques/memoria/internal/service"
 	"github.com/cassiomarques/memoria/internal/storage"
 	"github.com/cassiomarques/memoria/internal/tui/components"
@@ -101,6 +102,12 @@ type App struct {
 	// Fuzzy filter state (/ key)
 	filterState filterState
 	filterBuf   string // current filter text
+
+	// Fuzzy finder state (Ctrl+f)
+	finderActive  bool
+	finderBuf     string
+	finderResults []search.SearchResult
+	finderCursor  int
 
 	version           string
 	defaultTodoFolder string
@@ -254,6 +261,11 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return a, clearMessageCmd()
 		}
 
+		// Fuzzy finder mode — intercept all keys
+		if a.finderActive {
+			return a.handleFinderKey(key)
+		}
+
 		// Fuzzy filter typing mode — intercept all keys
 		if a.filterState == filterTyping {
 			return a.handleFilterKey(key)
@@ -318,6 +330,16 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				a.focusedPane = focusList
 				a.noteList.SetFilter("")
 				a.setMessage("🔍 Type to filter (Esc to cancel)", false)
+				return a, nil
+			case "ctrl+f":
+				if a.svc == nil {
+					a.setMessage("No service configured", true)
+					return a, nil
+				}
+				a.finderActive = true
+				a.finderBuf = ""
+				a.finderResults = nil
+				a.finderCursor = 0
 				return a, nil
 			case "p":
 				sel := a.noteList.SelectedItem()
@@ -1648,6 +1670,7 @@ func (a *App) cmdHelp() {
 |-----|--------|
 | **:** | Open command bar |
 | **/** | Search/filter notes |
+| **Ctrl+f** | Fuzzy finder (search all notes by name) |
 | **Tab** | Switch focus / autocomplete |
 | **p** | Preview selected note |
 | **e** | Edit previewed note (when preview focused) |
@@ -1969,6 +1992,126 @@ func (a *App) resizeComponents() {
 	}
 }
 
+// handleFinderKey processes key events while the fuzzy finder overlay is active.
+func (a App) handleFinderKey(key string) (tea.Model, tea.Cmd) {
+	switch key {
+	case "esc":
+		a.finderActive = false
+		a.finderBuf = ""
+		a.finderResults = nil
+		a.finderCursor = 0
+		return a, nil
+	case "enter":
+		if len(a.finderResults) > 0 && a.finderCursor < len(a.finderResults) {
+			path := a.finderResults[a.finderCursor].Path
+			a.finderActive = false
+			a.finderBuf = ""
+			a.finderResults = nil
+			a.finderCursor = 0
+			a.noteList.SelectByPath(path)
+			if a.preview.Visible() {
+				if sel := a.noteList.SelectedItem(); sel != nil {
+					a.loadPreview(sel)
+				}
+			}
+		}
+		return a, nil
+	case "up":
+		if a.finderCursor > 0 {
+			a.finderCursor--
+		}
+		return a, nil
+	case "down":
+		if a.finderCursor < len(a.finderResults)-1 {
+			a.finderCursor++
+		}
+		return a, nil
+	case "backspace":
+		if len(a.finderBuf) > 0 {
+			a.finderBuf = a.finderBuf[:len(a.finderBuf)-1]
+			a.updateFinderResults()
+		}
+		return a, nil
+	default:
+		// Only accept printable characters
+		if len(key) == 1 && key[0] >= 32 && key[0] <= 126 {
+			a.finderBuf += key
+			a.updateFinderResults()
+		}
+		return a, nil
+	}
+}
+
+// updateFinderResults queries the search index with the current finder input.
+func (a *App) updateFinderResults() {
+	if a.svc == nil || a.finderBuf == "" {
+		a.finderResults = nil
+		a.finderCursor = 0
+		return
+	}
+	results, err := a.svc.SearchFuzzy(a.finderBuf, 20)
+	if err != nil {
+		a.finderResults = nil
+	} else {
+		a.finderResults = results
+	}
+	a.finderCursor = 0
+}
+
+// renderFinder renders the fuzzy finder overlay.
+func (a App) renderFinder() string {
+	promptStyle := lipgloss.NewStyle().Foreground(theme.ColorBlue).Bold(true)
+	inputStyle := lipgloss.NewStyle().Foreground(theme.ColorText)
+	selectedStyle := lipgloss.NewStyle().Foreground(theme.ColorBlue).Bold(true)
+	normalStyle := lipgloss.NewStyle().Foreground(theme.ColorSubtext0)
+	scoreStyle := lipgloss.NewStyle().Foreground(theme.ColorOverlay0)
+
+	prompt := promptStyle.Render("🔍 ") + inputStyle.Render(a.finderBuf) + inputStyle.Render("█")
+
+	// Calculate available height for results
+	// Account for header, prompt line, bar, status bar
+	maxResults := a.height - lipgloss.Height(a.headerCache) - 4
+	if maxResults < 1 {
+		maxResults = 1
+	}
+	if maxResults > len(a.finderResults) {
+		maxResults = len(a.finderResults)
+	}
+
+	var lines []string
+	lines = append(lines, prompt, "")
+
+	switch {
+	case a.finderBuf == "":
+		lines = append(lines, normalStyle.Render("  Type to search across all notes..."))
+	case len(a.finderResults) == 0:
+		lines = append(lines, normalStyle.Render("  No results"))
+	default:
+		for i := 0; i < maxResults; i++ {
+			r := a.finderResults[i]
+			cursor := "  "
+			style := normalStyle
+			if i == a.finderCursor {
+				cursor = "> "
+				style = selectedStyle
+			}
+			score := scoreStyle.Render(fmt.Sprintf(" (%.1f)", r.Score))
+			lines = append(lines, cursor+style.Render(r.Path)+score)
+		}
+		if len(a.finderResults) > maxResults {
+			lines = append(lines, normalStyle.Render(fmt.Sprintf("  ... and %d more", len(a.finderResults)-maxResults)))
+		}
+	}
+
+	// Pad to fill available height so layout doesn't shift
+	contentHeight := a.height - lipgloss.Height(a.headerCache) - 2
+	for len(lines) < contentHeight {
+		lines = append(lines, "")
+	}
+
+	return strings.Join(lines, "\n")
+}
+
 func (a App) View() tea.View {
 	if a.width == 0 {
 		v := tea.NewView("Loading...")
@@ -1977,12 +2120,15 @@ func (a App) View() tea.View {
 	}
 
 	var mainContent string
-	if a.preview.Visible() {
+	switch {
+	case a.finderActive:
+		mainContent = a.renderFinder()
+	case a.preview.Visible():
 		mainContent = lipgloss.JoinHorizontal(lipgloss.Top,
 			a.noteList.View(),
 			a.preview.View(),
 		)
-	} else {
+	default:
 		mainContent = a.noteList.View()
 	}
 

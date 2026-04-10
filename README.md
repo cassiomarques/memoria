@@ -125,6 +125,7 @@ This creates `ideas/my-first-note.md` and opens it in your editor. When you save
 | **d** | Delete selected note or folder (with confirmation) |
 | **:** | Open command bar |
 | **/** | Search / filter notes |
+| **Ctrl+f** | Fuzzy finder (search all notes by name) |
 | **?** | Show help |
 | **Esc** | Close preview / help / command bar |
 | **q** | Close preview/help if open, otherwise quit |

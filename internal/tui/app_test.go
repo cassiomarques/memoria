@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"charm.land/lipgloss/v2"
+	"github.com/cassiomarques/memoria/internal/search"
 	"github.com/cassiomarques/memoria/internal/tui/components"
 )
 
@@ -760,6 +761,120 @@ func TestCmdRename_BuildsCorrectPath(t *testing.T) {
 	msg := a.statusBar.Message()
 	if !strings.Contains(msg, "No service") {
 		t.Errorf("expected 'No service' error (validation passed), got %q", msg)
+	}
+}
+
+func TestFinder_ActivateAndDeactivate(t *testing.T) {
+	a := newTestApp()
+
+	// Activate
+	a.finderActive = true
+	a.finderBuf = ""
+	if !a.finderActive {
+		t.Fatal("expected finder to be active")
+	}
+
+	// Deactivate via Esc
+	result, _ := a.handleFinderKey("esc")
+	a = result.(App)
+	if a.finderActive {
+		t.Error("expected finder to be deactivated after Esc")
+	}
+}
+
+func TestFinder_KeyInput(t *testing.T) {
+	a := newTestApp()
+	a.finderActive = true
+
+	// Type characters
+	result, _ := a.handleFinderKey("a")
+	a = result.(App)
+	result, _ = a.handleFinderKey("b")
+	a = result.(App)
+	if a.finderBuf != "ab" {
+		t.Errorf("expected finderBuf='ab', got %q", a.finderBuf)
+	}
+
+	// Backspace
+	result, _ = a.handleFinderKey("backspace")
+	a = result.(App)
+	if a.finderBuf != "a" {
+		t.Errorf("expected finderBuf='a' after backspace, got %q", a.finderBuf)
+	}
+}
+
+func TestFinder_CursorNavigation(t *testing.T) {
+	a := newTestApp()
+	a.finderActive = true
+
+	// Simulate some results
+	a.finderResults = []search.SearchResult{
+		{Path: "note1.md", Score: 1.0},
+		{Path: "note2.md", Score: 0.8},
+		{Path: "note3.md", Score: 0.6},
+	}
+	a.finderCursor = 0
+
+	// Move down
+	result, _ := a.handleFinderKey("down")
+	a = result.(App)
+	if a.finderCursor != 1 {
+		t.Errorf("expected cursor=1, got %d", a.finderCursor)
+	}
+
+	// Move down again
+	result, _ = a.handleFinderKey("down")
+	a = result.(App)
+	if a.finderCursor != 2 {
+		t.Errorf("expected cursor=2, got %d", a.finderCursor)
+	}
+
+	// Can't go past last result
+	result, _ = a.handleFinderKey("down")
+	a = result.(App)
+	if a.finderCursor != 2 {
+		t.Errorf("expected cursor to stay at 2, got %d", a.finderCursor)
+	}
+
+	// Move up
+	result, _ = a.handleFinderKey("up")
+	a = result.(App)
+	if a.finderCursor != 1 {
+		t.Errorf("expected cursor=1, got %d", a.finderCursor)
+	}
+}
+
+func TestFinder_RenderOutput(t *testing.T) {
+	a := newTestApp()
+	a.finderActive = true
+	a.finderBuf = "test"
+	a.finderResults = []search.SearchResult{
+		{Path: "notes/test-file.md", Score: 1.5},
+	}
+	a.finderCursor = 0
+	a.height = 24
+
+	view := a.renderFinder()
+	if !strings.Contains(view, "test") {
+		t.Error("expected finder to show input text")
+	}
+	if !strings.Contains(view, "test-file.md") {
+		t.Error("expected finder to show result path")
+	}
+}
+
+func TestFinder_EnterSelectsNote(t *testing.T) {
+	a := newTestApp()
+	a.finderActive = true
+	a.finderResults = []search.SearchResult{
+		{Path: "work/meeting.md", Score: 1.0},
+	}
+	a.finderCursor = 0
+
+	result, _ := a.handleFinderKey("enter")
+	a = result.(App)
+	if a.finderActive {
+		t.Error("expected finder to close after Enter")
 	}
 }
 
