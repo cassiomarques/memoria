@@ -773,7 +773,7 @@ func buildTree(items []NoteItem, expandAll bool, showPinned bool, todoFolder str
 		target.children = append(target.children, note)
 	}
 
-	sortTree(root)
+	sortTree(root, todoFolder)
 
 	// Separate root children: folders, then root notes
 	var folders, rootNotes []*treeNode
@@ -846,13 +846,46 @@ func collectPinned(node *treeNode, result *[]*treeNode) {
 	}
 }
 
-func sortTree(node *treeNode) {
+func sortTree(node *treeNode, todoFolder string) {
 	if !node.isFolder || len(node.children) == 0 {
 		return
 	}
 	for _, child := range node.children {
-		sortTree(child)
+		sortTree(child, todoFolder)
 	}
+
+	// Inside the TODO folder: pending first (sorted by due date, then name),
+	// completed at the bottom (sorted by due date, then name).
+	if todoFolder != "" && strings.EqualFold(node.name, todoFolder) {
+		sort.SliceStable(node.children, func(i, j int) bool {
+			ci, cj := node.children[i], node.children[j]
+			// Folders always come first
+			if ci.isFolder != cj.isFolder {
+				return ci.isFolder
+			}
+			// Among notes: pending before done
+			doneI := ci.noteItem != nil && ci.noteItem.Done
+			doneJ := cj.noteItem != nil && cj.noteItem.Done
+			if doneI != doneJ {
+				return !doneI
+			}
+			// Within same status group: sort by due date (earliest first),
+			// notes without due date go after those with one.
+			hasDueI := ci.noteItem != nil && ci.noteItem.Due != nil
+			hasDueJ := cj.noteItem != nil && cj.noteItem.Due != nil
+			switch {
+			case hasDueI && hasDueJ:
+				if !ci.noteItem.Due.Equal(*cj.noteItem.Due) {
+					return ci.noteItem.Due.Before(*cj.noteItem.Due)
+				}
+			case hasDueI != hasDueJ:
+				return hasDueI
+			}
+			return strings.ToLower(ci.name) < strings.ToLower(cj.name)
+		})
+		return
+	}
+
 	sort.SliceStable(node.children, func(i, j int) bool {
 		ci, cj := node.children[i], node.children[j]
 		if ci.isFolder != cj.isFolder {

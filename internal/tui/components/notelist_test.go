@@ -1750,3 +1750,60 @@ func TestNoteList_ViewFitsWithinHeight(t *testing.T) {
 			lineCount, height)
 	}
 }
+
+func TestNoteList_TodoFolderSortOrder(t *testing.T) {
+	// Inside the TODO folder: pending todos should come before done,
+	// and within each group, sorted by due date (earliest first),
+	// then alphabetically for items without due dates.
+	tomorrow := time.Now().Add(24 * time.Hour)
+	nextWeek := time.Now().Add(7 * 24 * time.Hour)
+
+	items := []NoteItem{
+		{Path: "TODO/done-old.md", Title: "done-old", Folder: "TODO", Todo: true, Done: true},
+		{Path: "TODO/pending-no-due.md", Title: "pending-no-due", Folder: "TODO", Todo: true},
+		{Path: "TODO/pending-next-week.md", Title: "pending-next-week", Folder: "TODO", Todo: true, Due: &nextWeek},
+		{Path: "TODO/done-recent.md", Title: "done-recent", Folder: "TODO", Todo: true, Done: true, Due: &tomorrow},
+		{Path: "TODO/pending-tomorrow.md", Title: "pending-tomorrow", Folder: "TODO", Todo: true, Due: &tomorrow},
+	}
+
+	nl := NewNoteList()
+	nl.SetTodoFolder("TODO")
+	nl.SetSize(80, 30)
+	nl.SetItems(items)
+
+	// Navigate into the TODO folder (first item is the folder itself)
+	// Expand it, then collect the order of children
+	nl.MoveDown() // move to first child
+
+	// Collect all visible items after the folder header
+	var names []string
+	for i := 0; i < len(nl.flatVisible); i++ {
+		node := nl.flatVisible[i]
+		if !node.isFolder && node.noteItem != nil {
+			names = append(names, node.noteItem.Title)
+		}
+	}
+
+	// Expected order:
+	// 1. pending-tomorrow (pending, earliest due)
+	// 2. pending-next-week (pending, later due)
+	// 3. pending-no-due (pending, no due date)
+	// 4. done-recent (done, has due)
+	// 5. done-old (done, no due)
+	expected := []string{
+		"pending-tomorrow",
+		"pending-next-week",
+		"pending-no-due",
+		"done-recent",
+		"done-old",
+	}
+
+	if len(names) != len(expected) {
+		t.Fatalf("expected %d items, got %d: %v", len(expected), len(names), names)
+	}
+	for i, want := range expected {
+		if names[i] != want {
+			t.Errorf("position %d: expected %q, got %q\nfull order: %v", i, want, names[i], names)
+		}
+	}
+}
