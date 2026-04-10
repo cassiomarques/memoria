@@ -369,6 +369,38 @@ func TestRoundTrip_Todos(t *testing.T) {
 	}
 }
 
+func TestRoundTrip_TodoWithDue(t *testing.T) {
+	env := setupTestEnv(t)
+	env.startServer(t)
+	client := env.dial(t)
+
+	resp, err := client.Send(ipc.Request{
+		Command: ipc.CmdTodo,
+		Args: map[string]string{
+			"title": "Submit report",
+			"due":   "2026-06-15",
+		},
+	})
+	if err != nil {
+		t.Fatalf("Send: %v", err)
+	}
+	if !resp.OK {
+		t.Fatalf("expected OK, got error: %s", resp.Error)
+	}
+
+	// Verify the due date was persisted
+	n, err := env.svc.Get("TODO/submit-report.md")
+	if err != nil {
+		t.Fatalf("Get: %v", err)
+	}
+	if n.Due == nil {
+		t.Fatal("expected due date to be set")
+	}
+	if n.Due.Format("2006-01-02") != "2026-06-15" {
+		t.Errorf("expected due=2026-06-15, got %s", n.Due.Format("2006-01-02"))
+	}
+}
+
 func TestRoundTrip_UnknownCommand(t *testing.T) {
 	env := setupTestEnv(t)
 	env.startServer(t)
