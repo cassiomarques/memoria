@@ -126,6 +126,7 @@ This creates `ideas/my-first-note.md` and opens it in your editor. When you save
 | **:** | Open command bar |
 | **/** | Search / filter notes |
 | **Ctrl+f** | Fuzzy finder (search all notes by name) |
+| **Tab** / **Shift+Tab** | Cycle through finder results |
 | **?** | Show help |
 | **Esc** | Close preview / help / command bar |
 | **q** | Close preview/help if open, otherwise quit |
@@ -537,7 +538,7 @@ modified: 2026-04-07T12:00:00Z
 Details about the task...
 ```
 
-Create todos with `:todo fix the auth bug #work @due(2026-04-15)`. Press **x** on a todo to toggle done/undone. Use `:todos` to see all todos sorted by due date. Overdue todos are shown in red, due-today in yellow, done items are dimmed.
+Create todos with `:todo fix the auth bug #work @due(2026-04-15)`. Press **x** on a todo to toggle done/undone. Use `:todos` to see all todos sorted by due date. Overdue todos are shown in red, due-today in yellow, done items are dimmed. The status bar shows a count of pending todos and overdue items.
 
 Notes live in `~/.memoria/notes/` and can be nested in folders:
 

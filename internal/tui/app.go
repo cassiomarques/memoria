@@ -1671,7 +1671,8 @@ func (a *App) cmdHelp() {
 | **:** | Open command bar |
 | **/** | Search/filter notes |
 | **Ctrl+f** | Fuzzy finder (search all notes by name) |
-| **Tab** | Switch focus / autocomplete |
+| **Tab** | Switch focus / autocomplete / next finder result |
+| **Shift+Tab** | Previous finder result |
 | **p** | Preview selected note |
 | **e** | Edit previewed note (when preview focused) |
 | **y** | Copy note content to clipboard (when preview focused) |
