@@ -2033,6 +2033,10 @@ func (a App) handleFinderKey(key string) (tea.Model, tea.Cmd) {
 		}
 		return a, nil
 	default:
+		// Bubble Tea v2 reports space bar as "space"
+		if key == "space" {
+			key = " "
+		}
 		// Only accept printable characters
 		if len(key) == 1 && key[0] >= 32 && key[0] <= 126 {
 			a.finderBuf += key

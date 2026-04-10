@@ -801,6 +801,13 @@ func TestFinder_KeyInput(t *testing.T) {
 	if a.finderBuf != "a" {
 		t.Errorf("expected finderBuf='a' after backspace, got %q", a.finderBuf)
 	}
+
+	// Space (Bubble Tea v2 sends "space" not " ")
+	result, _ = a.handleFinderKey("space")
+	a = result.(App)
+	if a.finderBuf != "a " {
+		t.Errorf("expected finderBuf='a ' after space, got %q", a.finderBuf)
+	}
 }
 
 func TestFinder_CursorNavigation(t *testing.T) {
