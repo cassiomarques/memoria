@@ -109,6 +109,9 @@ type App struct {
 	finderResults []search.SearchResult
 	finderCursor  int
 
+	// Trash mode state
+	trashMode bool
+
 	version           string
 	defaultTodoFolder string
 	headerCache       string // rendered header, updated on resize
@@ -290,6 +293,37 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return a, nil
 			}
 			// All other keys fall through to normal handling below
+		}
+
+		// Trash mode — limited key set
+		if a.trashMode && !a.commandBar.Active() {
+			switch key {
+			case "esc", "q":
+				a.exitTrashMode()
+				return a, nil
+			case "r":
+				a.restoreFromTrash()
+				return a, nil
+			case "d":
+				a.initiateDelete()
+				return a, nil
+			case "j", "down":
+				a.noteList.MoveDown()
+				return a, nil
+			case "k", "up":
+				a.noteList.MoveUp()
+				return a, nil
+			case "p", "enter":
+				a.previewTrashItem()
+				return a, nil
+			case ":":
+				cmd := a.commandBar.Focus()
+				cmds = append(cmds, cmd)
+				return a, tea.Batch(cmds...)
+			case "ctrl+c":
+				return a, tea.Quit
+			}
+			return a, nil
 		}
 
 		// Global quit keys (only when command bar is not active)
@@ -585,7 +619,11 @@ func (a *App) initiateDelete() {
 		a.pendingDelete = true
 		a.pendingDeletePath = folder
 		a.pendingDeleteIsFolder = true
-		a.setMessage(fmt.Sprintf("Delete folder '%s' and all %d notes? (y/N)", folder, count), true)
+		if a.trashMode {
+			a.setMessage(fmt.Sprintf("Permanently delete folder '%s' and all %d notes? (y/N)", folder, count), true)
+		} else {
+			a.setMessage(fmt.Sprintf("Trash folder '%s' and all %d notes? (y/N)", folder, count), true)
+		}
 	} else {
 		sel := a.noteList.SelectedItem()
 		if sel == nil {
@@ -594,11 +632,16 @@ func (a *App) initiateDelete() {
 		a.pendingDelete = true
 		a.pendingDeletePath = sel.Path
 		a.pendingDeleteIsFolder = false
-		a.setMessage(fmt.Sprintf("Delete '%s'? (y/N)", sel.Path), true)
+		if a.trashMode {
+			a.setMessage(fmt.Sprintf("Permanently delete '%s'? (y/N)", sel.Path), true)
+		} else {
+			a.setMessage(fmt.Sprintf("Trash '%s'? (y/N)", sel.Path), true)
+		}
 	}
 }
 
 // confirmDelete executes the pending deletion.
+// In normal mode, soft-deletes to trash. In trash mode, permanently deletes.
 func (a *App) confirmDelete() {
 	if a.svc == nil {
 		return
@@ -606,34 +649,58 @@ func (a *App) confirmDelete() {
 
 	a.noteList.PrepareCursorForDelete()
 
-	if a.pendingDeleteIsFolder {
-		count, err := a.svc.DeleteFolder(a.pendingDeletePath)
-		if err != nil {
-			a.setMessage("Delete failed: "+err.Error(), true)
+	if a.trashMode {
+		// Permanent deletion from trash
+		if a.pendingDeleteIsFolder {
+			a.setMessage("Cannot delete folders from trash — use :empty-trash", true)
 		} else {
-			a.setMessage(fmt.Sprintf("Deleted folder '%s' (%d notes)", a.pendingDeletePath, count), false)
+			a.permanentlyDeleteFromTrash(a.pendingDeletePath)
 		}
 	} else {
-		a.deleteNote(a.pendingDeletePath)
+		// Soft-delete to trash
+		if a.pendingDeleteIsFolder {
+			count, err := a.svc.TrashFolder(a.pendingDeletePath)
+			if err != nil {
+				a.setMessage("Trash failed: "+err.Error(), true)
+			} else {
+				a.setMessage(fmt.Sprintf("Trashed folder '%s' (%d notes)", a.pendingDeletePath, count), false)
+			}
+		} else {
+			a.trashNote(a.pendingDeletePath)
+		}
 	}
 	_ = a.refreshNoteList()
 	a.refreshTags()
 }
 
-// deleteNote deletes a single note and clears the preview if it was showing
-// that note. Caller is responsible for refreshNoteList/refreshTags.
-func (a *App) deleteNote(path string) bool {
-	err := a.svc.Delete(path)
+// trashNote soft-deletes a single note to .trash/ and clears the preview
+// if it was showing that note.
+func (a *App) trashNote(path string) bool {
+	err := a.svc.Trash(path)
 	if err != nil {
-		a.setMessage("Delete failed: "+err.Error(), true)
+		a.setMessage("Trash failed: "+err.Error(), true)
 		return false
 	}
-	a.setMessage(fmt.Sprintf("Deleted: %s", path), false)
+	a.setMessage(fmt.Sprintf("Trashed: %s", path), false)
 	if a.previewedPath == path {
 		a.preview.SetContent("", "")
 		a.previewedPath = ""
 	}
 	return true
+}
+
+// permanentlyDeleteFromTrash removes a note from .trash/ forever.
+func (a *App) permanentlyDeleteFromTrash(path string) {
+	err := a.svc.PermanentlyDeleteFromTrash(path)
+	if err != nil {
+		a.setMessage("Delete failed: "+err.Error(), true)
+		return
+	}
+	a.setMessage(fmt.Sprintf("Permanently deleted: %s", path), false)
+	if a.previewedPath == path {
+		a.preview.SetContent("", "")
+		a.previewedPath = ""
+	}
 }
 
 // togglePin pins or unpins the currently selected note.
@@ -945,6 +1012,13 @@ func (a *App) executeCommand(cmd *Command) tea.Cmd {
 		return a.cmdRemote(cmd.Args)
 	case "fixfm":
 		return a.cmdFixFm()
+	case "trash":
+		a.enterTrashMode()
+		return nil
+	case "empty-trash":
+		return a.cmdEmptyTrash()
+	case "restore":
+		return a.cmdRestore(cmd.Args)
 	case "help":
 		a.cmdHelp()
 		return nil
@@ -1402,7 +1476,7 @@ func (a *App) cmdRm(args []string) tea.Cmd {
 	}
 
 	a.noteList.PrepareCursorForDelete()
-	if a.deleteNote(args[0]) {
+	if a.trashNote(args[0]) {
 		_ = a.refreshNoteList()
 		a.refreshTags()
 	}
@@ -1653,11 +1727,14 @@ func (a *App) cmdHelp() {
 | **cd** [folder] | Change current folder |
 | **mv** *old* *new* | Move/rename a note |
 | **rename** *new-name* | Rename selected note (stays in same folder) |
-| **rm** *path* | Delete a note |
+| **rm** *path* | Trash a note |
 | **tags** | Show all tags |
 | **todo** *title* [#tag] [@due(YYYY-MM-DD)] [--folder *path*] | Create a todo note |
 | **todo-due** *YYYY-MM-DD* / **clear** | Set or clear due date on selected todo |
 | **todos** | Show all todos sorted by due date |
+| **trash** | Open trash view (browse/restore/delete trashed notes) |
+| **restore** *path* | Restore a note from trash |
+| **empty-trash** | Permanently delete all trashed notes |
 | **sync** | Sync with git remote |
 | **remote** *url* | Set git remote and pull notes |
 | **fixfm** | Add frontmatter to notes missing it |
@@ -1676,7 +1753,7 @@ func (a *App) cmdHelp() {
 | **p** | Preview selected note |
 | **e** | Edit previewed note (when preview focused) |
 | **y** | Copy note content to clipboard (when preview focused) |
-| **d** | Delete selected note or folder |
+| **d** | Trash selected note or folder (permanent delete in trash view) |
 | **n** | Create a new note (in focused folder) |
 | **b** | Toggle bookmark on selected note |
 | **x** | Toggle todo done/undone |
@@ -2122,11 +2199,238 @@ func (a App) renderFinder() string {
 	return strings.Join(lines, "\n")
 }
 
+// enterTrashMode switches the UI to show trashed notes.
+func (a *App) enterTrashMode() {
+	if a.svc == nil {
+		a.setMessage("No service configured", true)
+		return
+	}
+
+	notes, err := a.svc.ListTrash()
+	if err != nil {
+		a.setMessage("Failed to list trash: "+err.Error(), true)
+		return
+	}
+
+	if len(notes) == 0 {
+		a.setMessage("🗑 Trash is empty", false)
+		return
+	}
+
+	a.trashMode = true
+	a.preview.SetContent("", "")
+	a.previewedPath = ""
+	a.customPreview = false
+	if a.preview.Visible() {
+		a.preview.Toggle()
+		a.focusedPane = focusList
+	}
+
+	// Build NoteItem list from trashed notes.
+	items := make([]components.NoteItem, 0, len(notes))
+	for _, n := range notes {
+		items = append(items, components.NoteItem{
+			Path:     n.Path,
+			Title:    n.Title,
+			Folder:   n.Folder,
+			Tags:     n.Tags,
+			Modified: n.Modified,
+			Todo:     n.Todo,
+			Done:     n.Done,
+			Due:      n.Due,
+		})
+	}
+
+	a.noteList.SetTodoFolder("") // no special todo sorting in trash
+	a.noteList.SetItems(items)
+	a.noteList.SetShowPinned(false)
+	a.resizeComponents()
+	a.setMessage("🗑 Trash — r: restore · d: delete forever · Esc: back", false)
+}
+
+// exitTrashMode returns to the normal note list.
+func (a *App) exitTrashMode() {
+	a.trashMode = false
+	a.preview.SetContent("", "")
+	a.previewedPath = ""
+	a.customPreview = false
+	if a.preview.Visible() {
+		a.preview.Toggle()
+		a.focusedPane = focusList
+	}
+	a.noteList.SetTodoFolder(a.defaultTodoFolder)
+	_ = a.refreshNoteList()
+	a.refreshTags()
+	a.resizeComponents()
+	a.statusBar.ClearMessage()
+}
+
+// restoreFromTrash restores the currently selected trash item.
+func (a *App) restoreFromTrash() {
+	if a.svc == nil {
+		return
+	}
+	sel := a.noteList.SelectedItem()
+	if sel == nil {
+		return
+	}
+	if a.noteList.SelectedIsFolder() {
+		a.setMessage("Select a note to restore, not a folder", true)
+		return
+	}
+
+	err := a.svc.RestoreFromTrash(sel.Path)
+	if err != nil {
+		a.setMessage("Restore failed: "+err.Error(), true)
+		return
+	}
+	a.setMessage(fmt.Sprintf("Restored: %s", sel.Path), false)
+
+	// Refresh the trash view.
+	notes, err := a.svc.ListTrash()
+	if err != nil || len(notes) == 0 {
+		a.exitTrashMode()
+		return
+	}
+	items := make([]components.NoteItem, 0, len(notes))
+	for _, n := range notes {
+		items = append(items, components.NoteItem{
+			Path:     n.Path,
+			Title:    n.Title,
+			Folder:   n.Folder,
+			Tags:     n.Tags,
+			Modified: n.Modified,
+			Todo:     n.Todo,
+			Done:     n.Done,
+			Due:      n.Due,
+		})
+	}
+	a.noteList.SetItems(items)
+}
+
+// previewTrashItem previews a trashed note via its .trash/ path.
+func (a *App) previewTrashItem() {
+	if a.svc == nil || a.noteList.SelectedIsFolder() {
+		return
+	}
+	sel := a.noteList.SelectedItem()
+	if sel == nil {
+		return
+	}
+
+	// Load from the .trash/ directory.
+	n, err := a.svc.Get(filepath.Join(".trash", sel.Path))
+	if err != nil {
+		a.setMessage("Preview failed: "+err.Error(), true)
+		return
+	}
+
+	if !a.preview.Visible() {
+		a.preview.Toggle()
+		a.resizeComponents()
+	}
+	a.preview.SetContent(n.Title, n.Content)
+	a.previewedPath = sel.Path
+	a.customPreview = false
+}
+
+// renderTrashHeader returns the colored header bar for trash mode.
+func (a App) renderTrashHeader() string {
+	count := len(a.noteList.AllItems())
+	text := fmt.Sprintf(" 🗑 TRASH (%d items) — r: restore · d: delete forever · Esc: back ", count)
+
+	style := lipgloss.NewStyle().
+		Background(theme.ColorRed).
+		Foreground(theme.ColorCrust).
+		Bold(true).
+		Width(a.width)
+
+	return style.Render(text)
+}
+
+// cmdEmptyTrash permanently deletes all trashed notes.
+func (a *App) cmdEmptyTrash() tea.Cmd {
+	if a.svc == nil {
+		a.setMessage("No service configured", true)
+		return nil
+	}
+
+	count, err := a.svc.EmptyTrash()
+	if err != nil {
+		a.setMessage("Empty trash failed: "+err.Error(), true)
+		return nil
+	}
+	if count == 0 {
+		a.setMessage("🗑 Trash is already empty", false)
+	} else {
+		a.setMessage(fmt.Sprintf("🗑 Permanently deleted %d notes from trash", count), false)
+	}
+
+	// If we were in trash mode, exit since it's now empty.
+	if a.trashMode {
+		a.exitTrashMode()
+	}
+	return nil
+}
+
+// cmdRestore restores a specific note from trash by path.
+// Syntax: :restore <path>
+func (a *App) cmdRestore(args []string) tea.Cmd {
+	if a.svc == nil {
+		a.setMessage("No service configured", true)
+		return nil
+	}
+	if len(args) == 0 {
+		a.setMessage("Usage: restore <path>", true)
+		return nil
+	}
+
+	path := strings.Join(args, " ")
+	err := a.svc.RestoreFromTrash(path)
+	if err != nil {
+		a.setMessage("Restore failed: "+err.Error(), true)
+		return nil
+	}
+	a.setMessage(fmt.Sprintf("Restored: %s", path), false)
+
+	if a.trashMode {
+		// Refresh trash view.
+		notes, err := a.svc.ListTrash()
+		if err != nil || len(notes) == 0 {
+			a.exitTrashMode()
+			return nil
+		}
+		items := make([]components.NoteItem, 0, len(notes))
+		for _, n := range notes {
+			items = append(items, components.NoteItem{
+				Path:     n.Path,
+				Title:    n.Title,
+				Folder:   n.Folder,
+				Tags:     n.Tags,
+				Modified: n.Modified,
+				Todo:     n.Todo,
+				Done:     n.Done,
+				Due:      n.Due,
+			})
+		}
+		a.noteList.SetItems(items)
+	} else {
+		_ = a.refreshNoteList()
+	}
+	return nil
+}
+
 func (a App) View() tea.View {
 	if a.width == 0 {
 		v := tea.NewView("Loading...")
 		v.AltScreen = true
 		return v
+	}
+
+	// Use the trash header when in trash mode.
+	header := a.headerCache
+	if a.trashMode {
+		header = a.renderTrashHeader()
 	}
 
 	var mainContent string
@@ -2153,7 +2457,7 @@ func (a App) View() tea.View {
 	statusView := a.statusBar.View()
 
 	content := lipgloss.JoinVertical(lipgloss.Left,
-		a.headerCache,
+		header,
 		mainContent,
 		barView,
 		statusView,

@@ -731,7 +731,13 @@ func (s *NoteService) EnsureFrontmatter() (int, error) {
 		if err != nil {
 			return err
 		}
-		if info.IsDir() || !strings.HasSuffix(info.Name(), ".md") {
+		if info.IsDir() {
+			if info.Name() == ".trash" {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if !strings.HasSuffix(info.Name(), ".md") {
 			return nil
 		}
 
@@ -889,4 +895,171 @@ func (s *NoteService) SetTodoDue(path string, due *time.Time) error {
 // ListTodos returns all todo notes from the metadata store, sorted by due date.
 func (s *NoteService) ListTodos() ([]*storage.NoteMeta, error) {
 	return s.meta.ListTodos()
+}
+
+// trashDir is the hidden directory inside the notes root used for soft-deleted notes.
+const trashDir = ".trash"
+
+// Trash soft-deletes a note by moving it into .trash/ preserving its relative path.
+// The note is removed from metadata and search, but the file is kept in .trash/.
+func (s *NoteService) Trash(path string) error {
+	path = ensureMD(path)
+	trashPath := filepath.Join(trashDir, path)
+
+	if err := s.files.Move(path, trashPath); err != nil {
+		return fmt.Errorf("moving to trash: %w", err)
+	}
+
+	// Best-effort cleanup of metadata and search — the file is already moved.
+	_ = s.meta.DeleteNote(path)
+	if s.search != nil {
+		_ = s.search.Remove(path)
+	}
+	s.requestSync("trash " + path)
+	return nil
+}
+
+// TrashFolder soft-deletes all notes in a folder by moving them to .trash/.
+func (s *NoteService) TrashFolder(folder string) (int, error) {
+	notes, err := s.files.ListAll()
+	if err != nil {
+		return 0, fmt.Errorf("listing notes: %w", err)
+	}
+
+	var trashed int
+	for _, n := range notes {
+		if n.Folder == folder || strings.HasPrefix(n.Folder, folder+"/") {
+			trashPath := filepath.Join(trashDir, n.Path)
+			if err := s.files.Move(n.Path, trashPath); err != nil {
+				return trashed, fmt.Errorf("trashing %s: %w", n.Path, err)
+			}
+			_ = s.meta.DeleteNote(n.Path)
+			if s.search != nil {
+				_ = s.search.Remove(n.Path)
+			}
+			trashed++
+		}
+	}
+
+	if trashed > 0 {
+		s.requestSync(fmt.Sprintf("trash folder %s (%d notes)", folder, trashed))
+	}
+	return trashed, nil
+}
+
+// ListTrash returns all notes inside .trash/, with paths relative to .trash/.
+func (s *NoteService) ListTrash() ([]*note.Note, error) {
+	trashRoot := s.files.AbsPath(trashDir)
+
+	info, err := os.Stat(trashRoot)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, nil // no trash dir = empty trash
+		}
+		return nil, fmt.Errorf("stat trash dir: %w", err)
+	}
+	if !info.IsDir() {
+		return nil, nil
+	}
+
+	var notes []*note.Note
+	err = filepath.Walk(trashRoot, func(path string, fi os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		if fi.IsDir() || !strings.HasSuffix(fi.Name(), ".md") {
+			return nil
+		}
+		relToTrash, relErr := filepath.Rel(trashRoot, path)
+		if relErr != nil {
+			return fmt.Errorf("computing relative path: %w", relErr)
+		}
+		// Load via the full relative path (.trash/...) so FileStore can find it.
+		fullRel := filepath.Join(trashDir, relToTrash)
+		n, loadErr := s.files.Load(fullRel)
+		if loadErr != nil {
+			return fmt.Errorf("loading trashed note %q: %w", relToTrash, loadErr)
+		}
+		// Override path to be relative to .trash/ so callers see the original path.
+		n.Path = relToTrash
+		n.Folder = folderFromPath(relToTrash)
+		notes = append(notes, n)
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return notes, nil
+}
+
+// RestoreFromTrash moves a trashed note back to its original location.
+// The path should be relative to .trash/ (i.e., the original note path).
+// Returns an error if a note already exists at the destination.
+func (s *NoteService) RestoreFromTrash(path string) error {
+	path = ensureMD(path)
+	trashPath := filepath.Join(trashDir, path)
+
+	// Check destination doesn't already exist.
+	if s.files.Exists(path) {
+		return fmt.Errorf("cannot restore: %s already exists", path)
+	}
+
+	if err := s.files.Move(trashPath, path); err != nil {
+		return fmt.Errorf("restoring from trash: %w", err)
+	}
+
+	// Re-index the restored note.
+	n, err := s.files.Load(path)
+	if err != nil {
+		return fmt.Errorf("loading restored note: %w", err)
+	}
+	_ = s.meta.UpsertNote(n)
+	if s.search != nil {
+		_ = s.search.Index(n)
+	}
+	s.requestSync("restore " + path)
+	return nil
+}
+
+// PermanentlyDeleteFromTrash removes a single note from .trash/ forever.
+func (s *NoteService) PermanentlyDeleteFromTrash(path string) error {
+	path = ensureMD(path)
+	trashPath := filepath.Join(trashDir, path)
+
+	if err := s.files.Delete(trashPath); err != nil {
+		return fmt.Errorf("deleting from trash: %w", err)
+	}
+	s.requestSync("permanently delete " + path)
+	return nil
+}
+
+// EmptyTrash permanently deletes everything in .trash/.
+func (s *NoteService) EmptyTrash() (int, error) {
+	notes, err := s.ListTrash()
+	if err != nil {
+		return 0, err
+	}
+
+	for _, n := range notes {
+		trashPath := filepath.Join(trashDir, n.Path)
+		_ = s.files.Delete(trashPath)
+	}
+
+	// Remove the .trash directory itself.
+	trashRoot := s.files.AbsPath(trashDir)
+	_ = os.RemoveAll(trashRoot)
+
+	if len(notes) > 0 {
+		s.requestSync(fmt.Sprintf("empty trash (%d notes)", len(notes)))
+	}
+	return len(notes), nil
+}
+
+// folderFromPath extracts the directory portion of a note path.
+func folderFromPath(path string) string {
+	dir := filepath.Dir(path)
+	if dir == "." {
+		return ""
+	}
+	return dir
 }

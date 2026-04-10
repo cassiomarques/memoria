@@ -122,7 +122,7 @@ This creates `ideas/my-first-note.md` and opens it in your editor. When you save
 | **e** | Edit note from preview (when preview is focused) |
 | **Tab** | Switch focus between tree and preview |
 | **n** | Create a new note in the focused folder |
-| **d** | Delete selected note or folder (with confirmation) |
+| **d** | Trash selected note or folder (permanent delete in trash view) |
 | **:** | Open command bar |
 | **/** | Search / filter notes |
 | **Ctrl+f** | Fuzzy finder (search all notes by name) |
@@ -168,11 +168,14 @@ Type `:` to open the command bar. Tab completion is available for paths, folders
 | `cd` | `:cd [folder]` | Change folder context (`/` for root) |
 | `mv` | `:mv <old> <new>` | Move or rename a note |
 | `rename` | `:rename <new-name>` | Rename selected note (stays in same folder) |
-| `rm` | `:rm <path>` | Delete a note |
+| `rm` | `:rm <path>` | Trash a note |
 | `tags` | `:tags` | Show all tags with note counts |
 | `todo` | `:todo <title> [#tag] [@due(YYYY-MM-DD)] [--folder <path>]` | Create a todo note |
 | `todo-due` | `:todo-due <YYYY-MM-DD>` or `:todo-due clear` | Set or clear due date on selected todo |
 | `todos` | `:todos` | Show all todos sorted by due date |
+| `trash` | `:trash` | Open trash view (browse, restore, or permanently delete) |
+| `restore` | `:restore <path>` | Restore a note from trash |
+| `empty-trash` | `:empty-trash` | Permanently delete all trashed notes |
 | `sync` | `:sync` | Pull from remote and reload all notes |
 | `remote` | `:remote <git-url>` | Configure git remote |
 | `fixfm` | `:fixfm` | Add frontmatter to notes missing it |
@@ -539,6 +542,8 @@ Details about the task...
 ```
 
 Create todos with `:todo fix the auth bug #work @due(2026-04-15)`. Press **x** on a todo to toggle done/undone. Use `:todos` to see all todos sorted by due date. Overdue todos are shown in red, due-today in yellow, done items are dimmed. The status bar shows a count of pending todos and overdue items.
+
+Deleting a note with **d** or `:rm` moves it to a `.trash/` folder instead of permanently removing it. Use `:trash` to browse trashed notes, **r** to restore one, and `:empty-trash` to permanently delete everything in the trash.
 
 Notes live in `~/.memoria/notes/` and can be nested in folders:
 

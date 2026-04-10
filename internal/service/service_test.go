@@ -1538,3 +1538,155 @@ func TestEdit_AppendsMDExtension(t *testing.T) {
 		t.Errorf("expected path myfile.md, got %s", n.Path)
 	}
 }
+
+func TestTrash_MoveAndRestore(t *testing.T) {
+	svc := setupService(t)
+
+	// Create a note.
+	_, err := svc.Create("work/meeting.md", "# Meeting notes", nil)
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+
+	// Trash it.
+	if err := svc.Trash("work/meeting.md"); err != nil {
+		t.Fatalf("Trash: %v", err)
+	}
+
+	// Should not appear in ListAll.
+	all, _ := svc.ListAll()
+	for _, n := range all {
+		if n.Path == "work/meeting.md" {
+			t.Error("trashed note still appears in ListAll")
+		}
+	}
+
+	// Should appear in ListTrash.
+	trashed, err := svc.ListTrash()
+	if err != nil {
+		t.Fatalf("ListTrash: %v", err)
+	}
+	if len(trashed) != 1 || trashed[0].Path != "work/meeting.md" {
+		t.Fatalf("expected 1 trashed note at work/meeting.md, got %v", trashed)
+	}
+
+	// Restore it.
+	if err := svc.RestoreFromTrash("work/meeting.md"); err != nil {
+		t.Fatalf("RestoreFromTrash: %v", err)
+	}
+
+	// Should be back in ListAll.
+	all, _ = svc.ListAll()
+	found := false
+	for _, n := range all {
+		if n.Path == "work/meeting.md" {
+			found = true
+		}
+	}
+	if !found {
+		t.Error("restored note not found in ListAll")
+	}
+
+	// Trash should be empty.
+	trashed, _ = svc.ListTrash()
+	if len(trashed) != 0 {
+		t.Errorf("expected empty trash, got %d items", len(trashed))
+	}
+}
+
+func TestTrash_RestoreCollision(t *testing.T) {
+	svc := setupService(t)
+
+	_, _ = svc.Create("notes.md", "original", nil)
+	_ = svc.Trash("notes.md")
+
+	// Create a new note at the same path.
+	_, _ = svc.Create("notes.md", "replacement", nil)
+
+	// Restore should fail because destination exists.
+	err := svc.RestoreFromTrash("notes.md")
+	if err == nil {
+		t.Fatal("expected collision error, got nil")
+	}
+	if !strings.Contains(err.Error(), "already exists") {
+		t.Errorf("expected 'already exists' error, got: %v", err)
+	}
+}
+
+func TestTrash_EmptyTrash(t *testing.T) {
+	svc := setupService(t)
+
+	_, _ = svc.Create("a.md", "aaa", nil)
+	_, _ = svc.Create("b.md", "bbb", nil)
+	_ = svc.Trash("a.md")
+	_ = svc.Trash("b.md")
+
+	count, err := svc.EmptyTrash()
+	if err != nil {
+		t.Fatalf("EmptyTrash: %v", err)
+	}
+	if count != 2 {
+		t.Errorf("expected 2 deleted, got %d", count)
+	}
+
+	trashed, _ := svc.ListTrash()
+	if len(trashed) != 0 {
+		t.Errorf("expected empty trash after emptying, got %d", len(trashed))
+	}
+}
+
+func TestTrash_PermanentlyDelete(t *testing.T) {
+	svc := setupService(t)
+
+	_, _ = svc.Create("kill-me.md", "content", nil)
+	_ = svc.Trash("kill-me.md")
+
+	err := svc.PermanentlyDeleteFromTrash("kill-me.md")
+	if err != nil {
+		t.Fatalf("PermanentlyDeleteFromTrash: %v", err)
+	}
+
+	trashed, _ := svc.ListTrash()
+	if len(trashed) != 0 {
+		t.Errorf("expected empty trash, got %d items", len(trashed))
+	}
+}
+
+func TestTrash_FolderTrash(t *testing.T) {
+	svc := setupService(t)
+
+	_, _ = svc.Create("project/a.md", "aaa", nil)
+	_, _ = svc.Create("project/b.md", "bbb", nil)
+	_, _ = svc.Create("other/c.md", "ccc", nil)
+
+	count, err := svc.TrashFolder("project")
+	if err != nil {
+		t.Fatalf("TrashFolder: %v", err)
+	}
+	if count != 2 {
+		t.Errorf("expected 2 trashed, got %d", count)
+	}
+
+	// other/c.md should still exist.
+	all, _ := svc.ListAll()
+	if len(all) != 1 || all[0].Path != "other/c.md" {
+		t.Errorf("expected only other/c.md, got %v", all)
+	}
+
+	trashed, _ := svc.ListTrash()
+	if len(trashed) != 2 {
+		t.Errorf("expected 2 in trash, got %d", len(trashed))
+	}
+}
+
+func TestTrash_EmptyTrashWhenEmpty(t *testing.T) {
+	svc := setupService(t)
+
+	count, err := svc.EmptyTrash()
+	if err != nil {
+		t.Fatalf("EmptyTrash: %v", err)
+	}
+	if count != 0 {
+		t.Errorf("expected 0, got %d", count)
+	}
+}

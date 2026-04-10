@@ -162,6 +162,7 @@ func (fs *FileStore) List(folder string) ([]*note.Note, error) {
 }
 
 // ListAll returns all notes recursively under the root, sorted by path.
+// The .trash directory is excluded from the listing.
 func (fs *FileStore) ListAll() ([]*note.Note, error) {
 	var notes []*note.Note
 
@@ -169,7 +170,13 @@ func (fs *FileStore) ListAll() ([]*note.Note, error) {
 		if err != nil {
 			return err
 		}
-		if info.IsDir() || !strings.HasSuffix(info.Name(), ".md") {
+		if info.IsDir() {
+			if info.Name() == ".trash" {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if !strings.HasSuffix(info.Name(), ".md") {
 			return nil
 		}
 
