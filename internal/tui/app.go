@@ -785,6 +785,7 @@ func (a *App) toggleArchive() {
 			a.setMessage("Error: "+err.Error(), true)
 			return
 		}
+		a.noteList.PrepareCursorForDelete()
 		_ = a.refreshNoteList()
 		a.setMessage("📦 Archived: "+sel.Title, false)
 	}
