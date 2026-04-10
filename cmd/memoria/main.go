@@ -104,7 +104,7 @@ Commands:
   sync                    Sync notes (git pull + reindex + commit + push)
   new <path> [--tags t]   Create a new note
   edit <path>             Update an existing note (content from stdin)
-  todo <title> [opts]     Create a new todo (--folder F, --tags t1,t2)
+  todo <title> [opts]     Create a new todo (--folder F, --tags t1,t2, --due YYYY-MM-DD)
   mcp                     Start the MCP server (stdio transport)
   help                    Show this help
 
@@ -323,7 +323,7 @@ func buildRequest(command string, args []string) ipc.Request {
 			req.Args["content"] = content
 		}
 	case "todo":
-		// memoria todo <title> [--folder F] [--tags t1,t2]
+		// memoria todo <title> [--folder F] [--tags t1,t2] [--due YYYY-MM-DD]
 		var titleParts []string
 		for i := 0; i < len(args); i++ {
 			switch args[i] {
@@ -335,6 +335,11 @@ func buildRequest(command string, args []string) ipc.Request {
 			case "--tags":
 				if i+1 < len(args) {
 					req.Args["tags"] = args[i+1]
+					i++
+				}
+			case "--due":
+				if i+1 < len(args) {
+					req.Args["due"] = args[i+1]
 					i++
 				}
 			default:

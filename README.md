@@ -287,13 +287,14 @@ Rolled back v2.3.1 due to errors
 EOF
 ```
 
-#### `memoria todo <title> [--folder F] [--tags t1,t2]`
+#### `memoria todo <title> [--folder F] [--tags t1,t2] [--due YYYY-MM-DD]`
 
 Create a new todo note. The title is slugified into a filename (e.g. "Buy groceries" → `buy-groceries.md`). Defaults to the `TODO/` folder.
 
 ```bash
 memoria todo "Buy groceries"
 memoria todo "Review PR" --folder "Work/tasks" --tags review,urgent
+memoria todo "Submit report" --due 2026-04-15
 ```
 
 ### Global Flags

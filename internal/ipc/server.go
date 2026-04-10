@@ -310,6 +310,7 @@ func (h *Handler) handleTodo(req Request) Response {
 		Title:  title,
 		Folder: folder,
 		Tags:   tags,
+		Due:    parseDueDate(req.Args["due"]),
 	})
 	if err != nil {
 		return ErrResponse(err.Error())
@@ -330,6 +331,18 @@ func validatePath(p string) error {
 		return fmt.Errorf("path traversal not allowed")
 	}
 	return nil
+}
+
+// parseDueDate parses a YYYY-MM-DD string into a *time.Time. Returns nil if empty or invalid.
+func parseDueDate(s string) *time.Time {
+	if s == "" {
+		return nil
+	}
+	t, err := time.Parse(time.DateOnly, s)
+	if err != nil {
+		return nil
+	}
+	return &t
 }
 
 // filterTodos applies a named filter to a list of todo metadata.

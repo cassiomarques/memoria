@@ -140,6 +140,7 @@ type todoInput struct {
 	Title  string `json:"title" jsonschema:"Title of the todo item."`
 	Folder string `json:"folder,omitempty" jsonschema:"Folder to create the todo in (default: TODO)."`
 	Tags   string `json:"tags,omitempty" jsonschema:"Comma-separated tags."`
+	Due    string `json:"due,omitempty" jsonschema:"Due date in YYYY-MM-DD format."`
 }
 
 // --- Tool handlers ---
@@ -218,6 +219,9 @@ func (s *Server) handleTodo(ctx context.Context, _ *mcp.CallToolRequest, input t
 	}
 	if input.Tags != "" {
 		args = append(args, "--tags", input.Tags)
+	}
+	if input.Due != "" {
+		args = append(args, "--due", input.Due)
 	}
 
 	s.writeMu.Lock()
