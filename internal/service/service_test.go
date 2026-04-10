@@ -1690,3 +1690,143 @@ func TestTrash_EmptyTrashWhenEmpty(t *testing.T) {
 		t.Errorf("expected 0, got %d", count)
 	}
 }
+
+func TestArchiveTodo(t *testing.T) {
+	svc := setupService(t)
+
+	// Create a todo
+	_, err := svc.CreateTodo(CreateTodoOptions{Title: "Buy milk", Folder: "TODO"})
+	if err != nil {
+		t.Fatalf("CreateTodo: %v", err)
+	}
+
+	todoPath := "TODO/buy-milk.md"
+
+	// Archive should fail — not done yet
+	err = svc.ArchiveTodo(todoPath)
+	if err == nil {
+		t.Fatal("expected error archiving pending todo")
+	}
+
+	// Mark as done
+	_, err = svc.ToggleTodoDone(todoPath)
+	if err != nil {
+		t.Fatalf("ToggleTodoDone: %v", err)
+	}
+
+	// Archive should now succeed
+	err = svc.ArchiveTodo(todoPath)
+	if err != nil {
+		t.Fatalf("ArchiveTodo: %v", err)
+	}
+
+	// Should NOT appear in ListTodos
+	todos, err := svc.ListTodos()
+	if err != nil {
+		t.Fatalf("ListTodos: %v", err)
+	}
+	for _, td := range todos {
+		if td.Path == todoPath {
+			t.Error("archived todo should not appear in ListTodos")
+		}
+	}
+
+	// Should appear in ListArchivedTodos
+	archived, err := svc.ListArchivedTodos()
+	if err != nil {
+		t.Fatalf("ListArchivedTodos: %v", err)
+	}
+	found := false
+	for _, td := range archived {
+		if td.Path == todoPath {
+			found = true
+			if !td.Archived {
+				t.Error("expected Archived=true")
+			}
+		}
+	}
+	if !found {
+		t.Error("archived todo not found in ListArchivedTodos")
+	}
+
+	// Unarchive
+	err = svc.UnarchiveTodo(todoPath)
+	if err != nil {
+		t.Fatalf("UnarchiveTodo: %v", err)
+	}
+
+	// Should appear in ListTodos again
+	todos, err = svc.ListTodos()
+	if err != nil {
+		t.Fatalf("ListTodos after unarchive: %v", err)
+	}
+	found = false
+	for _, td := range todos {
+		if td.Path == todoPath {
+			found = true
+		}
+	}
+	if !found {
+		t.Error("unarchived todo should reappear in ListTodos")
+	}
+}
+
+func TestToggleTodoDone_SetsCompleted(t *testing.T) {
+	svc := setupService(t)
+
+	_, err := svc.CreateTodo(CreateTodoOptions{Title: "Test task", Folder: "TODO"})
+	if err != nil {
+		t.Fatalf("CreateTodo: %v", err)
+	}
+
+	todoPath := "TODO/test-task.md"
+
+	// Mark as done — should set completed date
+	nowDone, err := svc.ToggleTodoDone(todoPath)
+	if err != nil {
+		t.Fatalf("ToggleTodoDone: %v", err)
+	}
+	if !nowDone {
+		t.Fatal("expected done=true")
+	}
+
+	// Check completed field is set
+	n, err := svc.Get(todoPath)
+	if err != nil {
+		t.Fatalf("Get: %v", err)
+	}
+	if n.Completed == nil {
+		t.Fatal("expected Completed to be set after marking done")
+	}
+
+	// Reopen — should clear completed
+	nowDone, err = svc.ToggleTodoDone(todoPath)
+	if err != nil {
+		t.Fatalf("ToggleTodoDone: %v", err)
+	}
+	if nowDone {
+		t.Fatal("expected done=false")
+	}
+
+	n, err = svc.Get(todoPath)
+	if err != nil {
+		t.Fatalf("Get: %v", err)
+	}
+	if n.Completed != nil {
+		t.Fatal("expected Completed to be nil after reopening")
+	}
+}
+
+func TestArchive_NonTodoFails(t *testing.T) {
+	svc := setupService(t)
+
+	_, err := svc.Create("Regular note.md", "", nil)
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+
+	err = svc.ArchiveTodo("Regular note.md")
+	if err == nil {
+		t.Fatal("expected error archiving a non-todo")
+	}
+}

@@ -463,6 +463,9 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			case "x":
 				a.toggleTodoDone()
 				return a, clearMessageCmd()
+			case "a":
+				a.toggleArchive()
+				return a, clearMessageCmd()
 			case "t":
 				show := a.noteList.ToggleShowModified()
 				if show {
@@ -753,6 +756,40 @@ func (a *App) toggleTodoDone() {
 	}
 }
 
+func (a *App) toggleArchive() {
+	if a.svc == nil {
+		return
+	}
+	sel := a.noteList.SelectedItem()
+	if sel == nil {
+		a.setMessage("Select a note first", false)
+		return
+	}
+	if !sel.Todo {
+		a.setMessage("Not a todo", false)
+		return
+	}
+	if sel.Archived {
+		if err := a.svc.UnarchiveTodo(sel.Path); err != nil {
+			a.setMessage("Error: "+err.Error(), true)
+			return
+		}
+		_ = a.refreshNoteList()
+		a.setMessage("📦 Unarchived: "+sel.Title, false)
+	} else {
+		if !sel.Done {
+			a.setMessage("Only completed todos can be archived", false)
+			return
+		}
+		if err := a.svc.ArchiveTodo(sel.Path); err != nil {
+			a.setMessage("Error: "+err.Error(), true)
+			return
+		}
+		_ = a.refreshNoteList()
+		a.setMessage("📦 Archived: "+sel.Title, false)
+	}
+}
+
 // copyPreviewToClipboard copies the raw markdown of the previewed note to the system clipboard.
 func (a *App) copyPreviewToClipboard() {
 	content := a.preview.Content()
@@ -867,15 +904,20 @@ func (a *App) refreshNoteList() error {
 			return err
 		}
 		for _, n := range notes {
+			if n.Archived {
+				continue // archived todos are hidden from the main tree
+			}
 			items = append(items, components.NoteItem{
-				Path:     n.Path,
-				Title:    n.Title,
-				Folder:   n.Folder,
-				Tags:     n.Tags,
-				Modified: n.Modified,
-				Todo:     n.Todo,
-				Done:     n.Done,
-				Due:      n.Due,
+				Path:      n.Path,
+				Title:     n.Title,
+				Folder:    n.Folder,
+				Tags:      n.Tags,
+				Modified:  n.Modified,
+				Todo:      n.Todo,
+				Done:      n.Done,
+				Due:       n.Due,
+				Completed: n.Completed,
+				Archived:  n.Archived,
 			})
 		}
 	} else {
@@ -884,15 +926,20 @@ func (a *App) refreshNoteList() error {
 			return err
 		}
 		for _, n := range notes {
+			if n.Archived {
+				continue
+			}
 			items = append(items, components.NoteItem{
-				Path:     n.Path,
-				Title:    n.Title,
-				Folder:   n.Folder,
-				Tags:     n.Tags,
-				Modified: n.Modified,
-				Todo:     n.Todo,
-				Done:     n.Done,
-				Due:      n.Due,
+				Path:      n.Path,
+				Title:     n.Title,
+				Folder:    n.Folder,
+				Tags:      n.Tags,
+				Modified:  n.Modified,
+				Todo:      n.Todo,
+				Done:      n.Done,
+				Due:       n.Due,
+				Completed: n.Completed,
+				Archived:  n.Archived,
 			})
 		}
 	}
@@ -918,10 +965,10 @@ func (a *App) refreshNoteList() error {
 	// Count todos and overdue for status bar
 	var todoCount, overdueCount int
 	today := time.Now()
-	for _, item := range items {
-		if item.Todo && !item.Done {
+	for i := range items {
+		if items[i].Todo && !items[i].Done {
 			todoCount++
-			if item.Due != nil && item.Due.Before(time.Date(today.Year(), today.Month(), today.Day(), 0, 0, 0, 0, time.Local)) {
+			if items[i].Due != nil && items[i].Due.Before(time.Date(today.Year(), today.Month(), today.Day(), 0, 0, 0, 0, time.Local)) {
 				overdueCount++
 			}
 		}
@@ -1217,14 +1264,16 @@ func (a *App) cmdSearch(args []string) tea.Cmd {
 			continue
 		}
 		items = append(items, components.NoteItem{
-			Path:     n.Path,
-			Title:    n.Title,
-			Folder:   n.Folder,
-			Tags:     n.Tags,
-			Modified: n.Modified,
-			Todo:     n.Todo,
-			Done:     n.Done,
-			Due:      n.Due,
+			Path:      n.Path,
+			Title:     n.Title,
+			Folder:    n.Folder,
+			Tags:      n.Tags,
+			Modified:  n.Modified,
+			Todo:      n.Todo,
+			Done:      n.Done,
+			Due:       n.Due,
+			Completed: n.Completed,
+			Archived:  n.Archived,
 		})
 	}
 
@@ -1256,14 +1305,16 @@ func (a *App) cmdRecent(args []string) tea.Cmd {
 	var items []components.NoteItem
 	for _, nm := range recent {
 		items = append(items, components.NoteItem{
-			Path:     nm.Path,
-			Title:    nm.Title,
-			Folder:   nm.Folder,
-			Tags:     nm.Tags,
-			Modified: nm.Modified,
-			Todo:     nm.Todo,
-			Done:     nm.Done,
-			Due:      nm.Due,
+			Path:      nm.Path,
+			Title:     nm.Title,
+			Folder:    nm.Folder,
+			Tags:      nm.Tags,
+			Modified:  nm.Modified,
+			Todo:      nm.Todo,
+			Done:      nm.Done,
+			Due:       nm.Due,
+			Completed: nm.Completed,
+			Archived:  nm.Archived,
 		})
 	}
 
@@ -1355,6 +1406,7 @@ func (a *App) cmdLs(args []string) tea.Cmd {
 				Path: n.Path, Title: n.Title, Folder: n.Folder,
 				Tags: n.Tags, Modified: n.Modified,
 				Todo: n.Todo, Done: n.Done, Due: n.Due,
+				Completed: n.Completed, Archived: n.Archived,
 			})
 		}
 	} else {
@@ -1368,6 +1420,7 @@ func (a *App) cmdLs(args []string) tea.Cmd {
 				Path: n.Path, Title: n.Title, Folder: n.Folder,
 				Tags: n.Tags, Modified: n.Modified,
 				Todo: n.Todo, Done: n.Done, Due: n.Due,
+				Completed: n.Completed, Archived: n.Archived,
 			})
 		}
 	}
@@ -1518,11 +1571,11 @@ func (a *App) cmdTags() tea.Cmd {
 }
 
 func (a *App) cmdTodos(args string) tea.Cmd {
-	// Parse optional filter: overdue, today, pending, done
+	// Parse optional filter: overdue, today, pending, done, archived
 	filter := strings.TrimSpace(strings.ToLower(args))
-	validFilters := map[string]bool{"": true, "overdue": true, "today": true, "pending": true, "done": true}
+	validFilters := map[string]bool{"": true, "overdue": true, "today": true, "pending": true, "done": true, "archived": true}
 	if !validFilters[filter] {
-		a.setMessage("Unknown filter: "+filter+" (use overdue, today, pending, done)", true)
+		a.setMessage("Unknown filter: "+filter+" (use overdue, today, pending, done, archived)", true)
 		return nil
 	}
 
@@ -1531,7 +1584,13 @@ func (a *App) cmdTodos(args string) tea.Cmd {
 		return nil
 	}
 
-	todos, err := a.svc.ListTodos()
+	var todos []*storage.NoteMeta
+	var err error
+	if filter == "archived" {
+		todos, err = a.svc.ListArchivedTodos()
+	} else {
+		todos, err = a.svc.ListTodos()
+	}
 	if err != nil {
 		a.setMessage("Todos failed: "+err.Error(), true)
 		return nil
@@ -1616,15 +1675,27 @@ func (a *App) cmdTodos(args string) tea.Cmd {
 				}
 			}
 		}
+		completedStr := ""
+		if t.Completed != nil {
+			completedStr = " — completed " + t.Completed.Format(time.DateOnly)
+		}
+		archivedStr := ""
+		if t.Archived {
+			archivedStr = " 📦"
+		}
 		tagStr := ""
 		if len(t.Tags) > 0 {
 			tagStr = " `" + strings.Join(t.Tags, "` `") + "`"
 		}
 		noteTitle := strings.TrimSuffix(t.Title, ".md")
-		lines = append(lines, fmt.Sprintf("- %s **%s**%s%s", icon, noteTitle, dueStr, tagStr))
+		lines = append(lines, fmt.Sprintf("- %s **%s**%s%s%s%s", icon, noteTitle, dueStr, completedStr, archivedStr, tagStr))
 	}
 
-	lines = append(lines, fmt.Sprintf("\n*%d pending, %d done*", pending, done))
+	if filter == "archived" {
+		lines = append(lines, fmt.Sprintf("\n*%d archived todos*", len(filtered)))
+	} else {
+		lines = append(lines, fmt.Sprintf("\n*%d pending, %d done*", pending, done))
+	}
 	a.preview.SetContent(title, strings.Join(lines, "\n"))
 	a.previewedPath = ""
 	a.customPreview = true
@@ -1633,7 +1704,11 @@ func (a *App) cmdTodos(args string) tea.Cmd {
 		a.resizeComponents()
 	}
 
-	a.setMessage(fmt.Sprintf("%d %s (%d pending)", len(filtered), strings.ToLower(title), pending), false)
+	if filter == "archived" {
+		a.setMessage(fmt.Sprintf("%d archived todos", len(filtered)), false)
+	} else {
+		a.setMessage(fmt.Sprintf("%d %s (%d pending)", len(filtered), strings.ToLower(title), pending), false)
+	}
 	return nil
 }
 
@@ -1731,7 +1806,7 @@ func (a *App) cmdHelp() {
 | **tags** | Show all tags |
 | **todo** *title* [#tag] [@due(YYYY-MM-DD)] [--folder *path*] | Create a todo note |
 | **todo-due** *YYYY-MM-DD* / **clear** | Set or clear due date on selected todo |
-| **todos** | Show all todos sorted by due date |
+| **todos** [*filter*] | Show todos (filters: overdue, today, pending, done, archived) |
 | **trash** | Open trash view (browse/restore/delete trashed notes) |
 | **restore** *path* | Restore a note from trash |
 | **empty-trash** | Permanently delete all trashed notes |
@@ -1757,6 +1832,7 @@ func (a *App) cmdHelp() {
 | **n** | Create a new note (in focused folder) |
 | **b** | Toggle bookmark on selected note |
 | **x** | Toggle todo done/undone |
+| **a** | Archive/unarchive completed todo |
 | **j/k** | Navigate list |
 | **h/l, ←/→** | Collapse/expand folder |
 | **H/L** | Collapse/expand all folders |
@@ -1904,14 +1980,16 @@ func (a *App) applyFilter() {
 				}
 				seen[r.Path] = true
 				items = append(items, components.NoteItem{
-					Path:     n.Path,
-					Title:    n.Title,
-					Folder:   n.Folder,
-					Tags:     n.Tags,
-					Modified: n.Modified,
-					Todo:     n.Todo,
-					Done:     n.Done,
-					Due:      n.Due,
+					Path:      n.Path,
+					Title:     n.Title,
+					Folder:    n.Folder,
+					Tags:      n.Tags,
+					Modified:  n.Modified,
+					Todo:      n.Todo,
+					Done:      n.Done,
+					Due:       n.Due,
+					Completed: n.Completed,
+					Archived:  n.Archived,
 				})
 			}
 		}
@@ -2230,14 +2308,16 @@ func (a *App) enterTrashMode() {
 	items := make([]components.NoteItem, 0, len(notes))
 	for _, n := range notes {
 		items = append(items, components.NoteItem{
-			Path:     n.Path,
-			Title:    n.Title,
-			Folder:   n.Folder,
-			Tags:     n.Tags,
-			Modified: n.Modified,
-			Todo:     n.Todo,
-			Done:     n.Done,
-			Due:      n.Due,
+			Path:      n.Path,
+			Title:     n.Title,
+			Folder:    n.Folder,
+			Tags:      n.Tags,
+			Modified:  n.Modified,
+			Todo:      n.Todo,
+			Done:      n.Done,
+			Due:       n.Due,
+			Completed: n.Completed,
+			Archived:  n.Archived,
 		})
 	}
 
@@ -2295,14 +2375,16 @@ func (a *App) restoreFromTrash() {
 	items := make([]components.NoteItem, 0, len(notes))
 	for _, n := range notes {
 		items = append(items, components.NoteItem{
-			Path:     n.Path,
-			Title:    n.Title,
-			Folder:   n.Folder,
-			Tags:     n.Tags,
-			Modified: n.Modified,
-			Todo:     n.Todo,
-			Done:     n.Done,
-			Due:      n.Due,
+			Path:      n.Path,
+			Title:     n.Title,
+			Folder:    n.Folder,
+			Tags:      n.Tags,
+			Modified:  n.Modified,
+			Todo:      n.Todo,
+			Done:      n.Done,
+			Due:       n.Due,
+			Completed: n.Completed,
+			Archived:  n.Archived,
 		})
 	}
 	a.noteList.SetItems(items)
@@ -2403,14 +2485,16 @@ func (a *App) cmdRestore(args []string) tea.Cmd {
 		items := make([]components.NoteItem, 0, len(notes))
 		for _, n := range notes {
 			items = append(items, components.NoteItem{
-				Path:     n.Path,
-				Title:    n.Title,
-				Folder:   n.Folder,
-				Tags:     n.Tags,
-				Modified: n.Modified,
-				Todo:     n.Todo,
-				Done:     n.Done,
-				Due:      n.Due,
+				Path:      n.Path,
+				Title:     n.Title,
+				Folder:    n.Folder,
+				Tags:      n.Tags,
+				Modified:  n.Modified,
+				Todo:      n.Todo,
+				Done:      n.Done,
+				Due:       n.Due,
+				Completed: n.Completed,
+				Archived:  n.Archived,
 			})
 		}
 		a.noteList.SetItems(items)

@@ -118,8 +118,8 @@ func completeTagCommand(argPart string, noteItems []components.NoteItem, tagList
 	// Space found — check if the path before the space is a valid note
 	candidatePath := argPart[:spaceIdx]
 	isNote := false
-	for _, item := range noteItems {
-		if strings.EqualFold(item.Path, candidatePath) {
+	for i := range noteItems {
+		if strings.EqualFold(noteItems[i].Path, candidatePath) {
 			isNote = true
 			break
 		}
@@ -156,8 +156,8 @@ func completeMvCommand(argPart string, noteItems []components.NoteItem) []string
 	isSource := false
 
 	// Check if it's a note path
-	for _, item := range noteItems {
-		if strings.EqualFold(item.Path, candidatePath) {
+	for i := range noteItems {
+		if strings.EqualFold(noteItems[i].Path, candidatePath) {
 			isSource = true
 			break
 		}
@@ -166,8 +166,8 @@ func completeMvCommand(argPart string, noteItems []components.NoteItem) []string
 	// Check if it's a folder path (with or without trailing slash)
 	if !isSource {
 		cleanCandidate := strings.TrimSuffix(candidatePath, "/")
-		for _, item := range noteItems {
-			folder := item.Folder
+		for i := range noteItems {
+			folder := noteItems[i].Folder
 			for folder != "" && folder != "." {
 				if strings.EqualFold(folder, cleanCandidate) {
 					isSource = true
@@ -203,15 +203,15 @@ func completePathSegments(prefix string, noteItems []components.NoteItem, includ
 
 	// Collect all candidate full paths
 	var paths []string
-	for _, item := range noteItems {
-		paths = append(paths, item.Path)
+	for i := range noteItems {
+		paths = append(paths, noteItems[i].Path)
 	}
 	// Also add folder paths (with trailing "/") so we can complete folder names
 	seen := make(map[string]bool)
-	for _, item := range noteItems {
-		if item.Folder != "" && !seen[item.Folder] {
-			seen[item.Folder] = true
-			paths = append(paths, item.Folder+"/")
+	for i := range noteItems {
+		if noteItems[i].Folder != "" && !seen[noteItems[i].Folder] {
+			seen[noteItems[i].Folder] = true
+			paths = append(paths, noteItems[i].Folder+"/")
 		}
 	}
 
@@ -299,7 +299,7 @@ func completeTodoCommand(argPart string, noteItems []components.NoteItem) []stri
 
 // completeTodosFilter suggests filter keywords for the :todos command.
 func completeTodosFilter(prefix string) []string {
-	filters := []string{"overdue", "today", "pending", "done"}
+	filters := []string{"overdue", "today", "pending", "done", "archived"}
 	prefix = strings.ToLower(strings.TrimSpace(prefix))
 	if prefix == "" {
 		return filters

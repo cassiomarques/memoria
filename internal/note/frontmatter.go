@@ -10,12 +10,14 @@ import (
 
 // Frontmatter represents the YAML frontmatter of a note.
 type Frontmatter struct {
-	Tags     []string  `yaml:"tags,omitempty"`
-	Created  time.Time `yaml:"created"`
-	Modified time.Time `yaml:"modified"`
-	Todo     bool      `yaml:"todo,omitempty"`
-	Done     bool      `yaml:"done,omitempty"`
-	Due      *DateOnly `yaml:"due,omitempty"`
+	Tags      []string  `yaml:"tags,omitempty"`
+	Created   time.Time `yaml:"created"`
+	Modified  time.Time `yaml:"modified"`
+	Todo      bool      `yaml:"todo,omitempty"`
+	Done      bool      `yaml:"done,omitempty"`
+	Due       *DateOnly `yaml:"due,omitempty"`
+	Completed *DateOnly `yaml:"completed,omitempty"`
+	Archived  bool      `yaml:"archived,omitempty"`
 }
 
 // DateOnly is a date-only time value that serializes as YYYY-MM-DD in YAML.
@@ -99,6 +101,12 @@ func (f *Frontmatter) Serialize() (string, error) {
 	if f.Due != nil {
 		data["due"] = f.Due.Time().Format(time.DateOnly)
 	}
+	if f.Completed != nil {
+		data["completed"] = f.Completed.Time().Format(time.DateOnly)
+	}
+	if f.Archived {
+		data["archived"] = true
+	}
 
 	out, err := yaml.Marshal(data)
 	if err != nil {
@@ -149,6 +157,11 @@ func ParseNote(path string, raw string) (*Note, error) {
 			t := fm.Due.Time()
 			n.Due = &t
 		}
+		if fm.Completed != nil {
+			t := fm.Completed.Time()
+			n.Completed = &t
+		}
+		n.Archived = fm.Archived
 	}
 
 	return n, nil

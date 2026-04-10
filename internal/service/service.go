@@ -845,6 +845,14 @@ func (s *NoteService) ToggleTodoDone(path string) (bool, error) {
 	n.Done = !n.Done
 	n.Modified = time.Now()
 
+	if n.Done {
+		now := time.Now()
+		n.Completed = &now
+	} else {
+		n.Completed = nil
+		n.Archived = false // unarchive if toggling back to pending
+	}
+
 	if err := s.files.Save(n); err != nil {
 		return false, fmt.Errorf("saving note: %w", err)
 	}
@@ -893,8 +901,73 @@ func (s *NoteService) SetTodoDue(path string, due *time.Time) error {
 }
 
 // ListTodos returns all todo notes from the metadata store, sorted by due date.
+// Archived todos are excluded.
 func (s *NoteService) ListTodos() ([]*storage.NoteMeta, error) {
 	return s.meta.ListTodos()
+}
+
+// ListArchivedTodos returns archived todos.
+func (s *NoteService) ListArchivedTodos() ([]*storage.NoteMeta, error) {
+	return s.meta.ListArchivedTodos()
+}
+
+// ArchiveTodo marks a completed todo as archived.
+func (s *NoteService) ArchiveTodo(path string) error {
+	path = ensureMD(path)
+
+	n, err := s.files.Load(path)
+	if err != nil {
+		return fmt.Errorf("loading note: %w", err)
+	}
+	if !n.Todo {
+		return fmt.Errorf("%q is not a todo", path)
+	}
+	if !n.Done {
+		return fmt.Errorf("only completed todos can be archived")
+	}
+
+	n.Archived = true
+	n.Modified = time.Now()
+
+	if err := s.files.Save(n); err != nil {
+		return fmt.Errorf("saving note: %w", err)
+	}
+	if err := s.meta.UpsertNote(n); err != nil {
+		return fmt.Errorf("upserting metadata: %w", err)
+	}
+	if s.search != nil {
+		_ = s.search.Remove(path) // archived notes leave the search index
+	}
+	s.requestSync("archive " + path)
+	return nil
+}
+
+// UnarchiveTodo restores an archived todo to the active list.
+func (s *NoteService) UnarchiveTodo(path string) error {
+	path = ensureMD(path)
+
+	n, err := s.files.Load(path)
+	if err != nil {
+		return fmt.Errorf("loading note: %w", err)
+	}
+	if !n.Archived {
+		return fmt.Errorf("%q is not archived", path)
+	}
+
+	n.Archived = false
+	n.Modified = time.Now()
+
+	if err := s.files.Save(n); err != nil {
+		return fmt.Errorf("saving note: %w", err)
+	}
+	if err := s.meta.UpsertNote(n); err != nil {
+		return fmt.Errorf("upserting metadata: %w", err)
+	}
+	if s.search != nil {
+		_ = s.search.Index(n) // re-add to search index
+	}
+	s.requestSync("unarchive " + path)
+	return nil
 }
 
 // trashDir is the hidden directory inside the notes root used for soft-deleted notes.

@@ -172,7 +172,7 @@ Type `:` to open the command bar. Tab completion is available for paths, folders
 | `tags` | `:tags` | Show all tags with note counts |
 | `todo` | `:todo <title> [#tag] [@due(YYYY-MM-DD)] [--folder <path>]` | Create a todo note |
 | `todo-due` | `:todo-due <YYYY-MM-DD>` or `:todo-due clear` | Set or clear due date on selected todo |
-| `todos` | `:todos` | Show all todos sorted by due date |
+| `todos` | `:todos [filter]` | Show todos (filters: overdue, today, pending, done, archived) |
 | `trash` | `:trash` | Open trash view (browse, restore, or permanently delete) |
 | `restore` | `:restore <path>` | Restore a note from trash |
 | `empty-trash` | `:empty-trash` | Permanently delete all trashed notes |
@@ -223,7 +223,7 @@ memoria tags --json
 
 #### `memoria todos [filter]`
 
-List todo notes. Optional filter: `overdue`, `today`, `pending`, `done`.
+List todo notes. Optional filter: `overdue`, `today`, `pending`, `done`, `archived`.
 
 ```bash
 memoria todos                   # All todos
@@ -231,6 +231,7 @@ memoria todos overdue           # Past due and not done
 memoria todos today             # Due today
 memoria todos pending           # Not yet done
 memoria todos done              # Completed
+memoria todos archived          # Archived todos
 memoria todos --json            # JSON output
 ```
 
@@ -424,7 +425,7 @@ To use a custom notes directory:
 | `list` | List notes, optionally filtered by folder |
 | `cat` | Read a note's full content |
 | `tags` | List all tags with note counts |
-| `todos` | List todos, optionally filtered (overdue/today/pending/done) |
+| `todos` | List todos, optionally filtered (overdue/today/pending/done/archived) |
 | `new` | Create a new note with optional content and tags |
 | `edit` | Update the content of an existing note |
 | `todo` | Create a new todo |
@@ -541,7 +542,7 @@ modified: 2026-04-07T12:00:00Z
 Details about the task...
 ```
 
-Create todos with `:todo fix the auth bug #work @due(2026-04-15)`. Press **x** on a todo to toggle done/undone. Use `:todos` to see all todos sorted by due date. Overdue todos are shown in red, due-today in yellow, done items are dimmed. The status bar shows a count of pending todos and overdue items.
+Create todos with `:todo fix the auth bug #work @due(2026-04-15)`. Press **x** on a todo to toggle done/undone. Use `:todos` to see all todos sorted by due date. Overdue todos are shown in red, due-today in yellow, done items are dimmed. The status bar shows a count of pending todos and overdue items. Completed todos show a completion date. Press **a** to archive completed todos — archived todos are hidden from the main list and `:todos done`, but accessible via `:todos archived`. Press **a** again on an archived todo to unarchive it.
 
 Deleting a note with **d** or `:rm` moves it to a `.trash/` folder instead of permanently removing it. Use `:trash` to browse trashed notes, **r** to restore one, and `:empty-trash` to permanently delete everything in the trash.
 

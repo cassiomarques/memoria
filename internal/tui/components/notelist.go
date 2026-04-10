@@ -14,15 +14,17 @@ import (
 
 // NoteItem represents a note entry for the list.
 type NoteItem struct {
-	Path     string
-	Title    string
-	Folder   string
-	Tags     []string
-	Modified time.Time
-	Pinned   bool
-	Todo     bool
-	Done     bool
-	Due      *time.Time
+	Path      string
+	Title     string
+	Folder    string
+	Tags      []string
+	Modified  time.Time
+	Pinned    bool
+	Todo      bool
+	Done      bool
+	Due       *time.Time
+	Completed *time.Time
+	Archived  bool
 }
 
 // treeNode represents a node in the folder tree (either a folder or a note).
@@ -626,6 +628,10 @@ func (n NoteList) renderNode(visibleIndex int) string {
 	if node.noteItem != nil && node.noteItem.Todo && node.noteItem.Due != nil && !node.noteItem.Done {
 		dueSuffix = " @" + node.noteItem.Due.Format(time.DateOnly)
 	}
+	// Show completed date for done todos
+	if node.noteItem != nil && node.noteItem.Todo && node.noteItem.Done && node.noteItem.Completed != nil {
+		dueSuffix = " ✓" + node.noteItem.Completed.Format(time.DateOnly)
+	}
 
 	// Build optional timestamp suffix
 	timeSuffix := ""
@@ -1087,8 +1093,8 @@ func (n *NoteList) SetFilter(pattern string) {
 	})
 
 	filtered := make([]NoteItem, len(matches))
-	for i, m := range matches {
-		filtered[i] = m.item
+	for i := range matches {
+		filtered[i] = matches[i].item
 	}
 
 	n.tree = buildTree(filtered, true, false, "") // always expand when filtering, no pinned section
