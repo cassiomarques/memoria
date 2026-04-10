@@ -14,6 +14,8 @@ type StatusBar struct {
 	folder       string
 	tagFilter    string
 	noteCount    int
+	todoCount    int
+	overdueCount int
 	synced       bool
 	width        int
 	message      string
@@ -28,11 +30,12 @@ func NewStatusBar() StatusBar {
 	}
 }
 
-func (s *StatusBar) SetFolder(folder string)       { s.folder = folder }
-func (s *StatusBar) SetTagFilter(tagFilter string) { s.tagFilter = tagFilter }
-func (s *StatusBar) SetNoteCount(noteCount int)    { s.noteCount = noteCount }
-func (s *StatusBar) SetSynced(synced bool)         { s.synced = synced }
-func (s *StatusBar) SetWidth(width int)            { s.width = width }
+func (s *StatusBar) SetFolder(folder string)          { s.folder = folder }
+func (s *StatusBar) SetTagFilter(tagFilter string)    { s.tagFilter = tagFilter }
+func (s *StatusBar) SetNoteCount(noteCount int)       { s.noteCount = noteCount }
+func (s *StatusBar) SetTodoCounts(todos, overdue int) { s.todoCount = todos; s.overdueCount = overdue }
+func (s *StatusBar) SetSynced(synced bool)            { s.synced = synced }
+func (s *StatusBar) SetWidth(width int)               { s.width = width }
 func (s *StatusBar) SetMessage(msg string, style lipgloss.Style) {
 	s.message = msg
 	s.messageStyle = style
@@ -64,6 +67,13 @@ func (s StatusBar) View() string {
 	}
 
 	countText := fmt.Sprintf("%d notes", s.noteCount)
+	if s.todoCount > 0 {
+		countText += fmt.Sprintf(" · %d todos", s.todoCount)
+	}
+	if s.overdueCount > 0 {
+		overdueText := fmt.Sprintf(" · %d overdue", s.overdueCount)
+		countText += lipgloss.NewStyle().Foreground(theme.ColorRed).Render(overdueText)
+	}
 	right := countText + sep + syncText
 
 	// Pad to fill the full width (account for style's horizontal padding of 2)

@@ -826,6 +826,19 @@ func (a *App) refreshNoteList() error {
 	a.statusBar.SetFolder(a.currentFolder)
 	a.statusBar.SetNoteCount(len(items))
 
+	// Count todos and overdue for status bar
+	var todoCount, overdueCount int
+	today := time.Now()
+	for _, item := range items {
+		if item.Todo && !item.Done {
+			todoCount++
+			if item.Due != nil && item.Due.Before(time.Date(today.Year(), today.Month(), today.Day(), 0, 0, 0, 0, time.Local)) {
+				overdueCount++
+			}
+		}
+	}
+	a.statusBar.SetTodoCounts(todoCount, overdueCount)
+
 	// Reapply filter if browsing filtered results
 	if a.filterState == filterBrowsing && a.filterBuf != "" {
 		a.applyFilter()

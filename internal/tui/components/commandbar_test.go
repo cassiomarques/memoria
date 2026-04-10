@@ -139,6 +139,38 @@ func TestStatusBar_Message(t *testing.T) {
 	}
 }
 
+func TestStatusBar_TodoCounts(t *testing.T) {
+	sb := NewStatusBar()
+	sb.SetWidth(120)
+	sb.SetNoteCount(42)
+	sb.SetTodoCounts(7, 2)
+	sb.SetSynced(true)
+
+	view := sb.View()
+	if !strings.Contains(view, "7 todos") {
+		t.Errorf("expected '7 todos' in view, got: %q", view)
+	}
+	if !strings.Contains(view, "2 overdue") {
+		t.Errorf("expected '2 overdue' in view, got: %q", view)
+	}
+}
+
+func TestStatusBar_TodoCounts_ZeroHidden(t *testing.T) {
+	sb := NewStatusBar()
+	sb.SetWidth(120)
+	sb.SetNoteCount(10)
+	sb.SetTodoCounts(0, 0)
+	sb.SetSynced(true)
+
+	view := sb.View()
+	if strings.Contains(view, "todos") {
+		t.Error("expected no 'todos' when count is 0")
+	}
+	if strings.Contains(view, "overdue") {
+		t.Error("expected no 'overdue' when count is 0")
+	}
+}
+
 // --- AcceptSuggestion tests ---
 
 func TestCommandBar_AcceptSuggestion_SingleArg(t *testing.T) {
