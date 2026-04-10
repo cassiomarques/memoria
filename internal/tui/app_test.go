@@ -849,6 +849,20 @@ func TestFinder_CursorNavigation(t *testing.T) {
 	if a.finderCursor != 1 {
 		t.Errorf("expected cursor=1, got %d", a.finderCursor)
 	}
+
+	// Tab moves down
+	result, _ = a.handleFinderKey("tab")
+	a = result.(App)
+	if a.finderCursor != 2 {
+		t.Errorf("expected cursor=2 after tab, got %d", a.finderCursor)
+	}
+
+	// Shift+tab moves up
+	result, _ = a.handleFinderKey("shift+tab")
+	a = result.(App)
+	if a.finderCursor != 1 {
+		t.Errorf("expected cursor=1 after shift+tab, got %d", a.finderCursor)
+	}
 }
 
 func TestFinder_RenderOutput(t *testing.T) {

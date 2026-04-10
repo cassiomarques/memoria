@@ -2021,9 +2021,14 @@ func (a App) handleFinderKey(key string) (tea.Model, tea.Cmd) {
 			a.finderCursor--
 		}
 		return a, nil
-	case "down":
+	case "down", "tab":
 		if a.finderCursor < len(a.finderResults)-1 {
 			a.finderCursor++
+		}
+		return a, nil
+	case "shift+tab":
+		if a.finderCursor > 0 {
+			a.finderCursor--
 		}
 		return a, nil
 	case "backspace":
