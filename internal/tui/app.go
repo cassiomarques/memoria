@@ -1688,7 +1688,7 @@ func (a *App) cmdTodos(args string) tea.Cmd {
 		if len(t.Tags) > 0 {
 			tagStr = " `" + strings.Join(t.Tags, "` `") + "`"
 		}
-		noteTitle := strings.TrimSuffix(t.Title, ".md")
+		noteTitle := components.HumanizeTitle(strings.TrimSuffix(t.Title, ".md"))
 		lines = append(lines, fmt.Sprintf("- %s **%s**%s%s%s%s", icon, noteTitle, dueStr, completedStr, archivedStr, tagStr))
 	}
 

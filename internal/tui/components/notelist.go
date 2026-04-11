@@ -769,7 +769,7 @@ func buildTree(items []NoteItem, expandAll bool, showPinned bool, todoFolder str
 		}
 
 		note := &treeNode{
-			name:     humanizeTitle(item.Title),
+			name:     HumanizeTitle(item.Title),
 			isFolder: false,
 			noteItem: item,
 		}
@@ -811,7 +811,7 @@ func buildTree(items []NoteItem, expandAll bool, showPinned bool, todoFolder str
 			for _, pn := range pinnedNodes {
 				// Create shallow copy so they appear under the virtual section
 				child := &treeNode{
-					name:     humanizeTitle(pn.noteItem.Title),
+					name:     HumanizeTitle(pn.noteItem.Title),
 					isFolder: false,
 					noteItem: pn.noteItem,
 					depth:    1,
@@ -910,9 +910,9 @@ func setLastChildFlags(nodes []*treeNode) {
 	}
 }
 
-// humanizeTitle converts a raw filename-based title into a readable form.
+// HumanizeTitle converts a raw filename-based title into a readable form.
 // e.g. "running_azure_blob_storage" → "Running Azure Blob Storage"
-func humanizeTitle(title string) string {
+func HumanizeTitle(title string) string {
 	s := strings.ReplaceAll(title, "_", " ")
 	s = strings.ReplaceAll(s, "-", " ")
 
