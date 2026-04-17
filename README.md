@@ -159,7 +159,7 @@ Type `:` to open the command bar. Tab completion is available for paths, folders
 
 | Command | Usage | Description |
 |---------|-------|-------------|
-| `new` | `:new <path> [tag1 tag2...]` | Create a note and open in editor |
+| `new` | `:new <path> [tag1 tag2...] [--clipboard]` | Create a note (from clipboard or open editor) |
 | `open` | `:open <path>` | Open an existing note |
 | `search` | `:search <query>` | Full-text search across all notes |
 | `tag` | `:tag <path> <tag1> [tag2...]` | Add tags to a note |
@@ -170,7 +170,7 @@ Type `:` to open the command bar. Tab completion is available for paths, folders
 | `rename` | `:rename <new-name>` | Rename selected note (stays in same folder) |
 | `rm` | `:rm <path>` | Trash a note |
 | `tags` | `:tags` | Show all tags with note counts |
-| `todo` | `:todo <title> [#tag] [@due(YYYY-MM-DD)] [--folder <path>]` | Create a todo note |
+| `todo` | `:todo <title> [#tag] [@due(YYYY-MM-DD)] [--folder <path>] [--clipboard]` | Create a todo note |
 | `todo-due` | `:todo-due <YYYY-MM-DD>` or `:todo-due clear` | Set or clear due date on selected todo |
 | `todos` | `:todos [filter]` | Show todos (filters: overdue, today, pending, done, archived) |
 | `trash` | `:trash` | Open trash view (browse, restore, or permanently delete) |
@@ -426,9 +426,9 @@ To use a custom notes directory:
 | `cat` | Read a note's full content |
 | `tags` | List all tags with note counts |
 | `todos` | List todos, optionally filtered (overdue/today/pending/done/archived) |
-| `new` | Create a new note with optional content and tags |
+| `new` | Create a new note with optional content, tags, or clipboard paste |
 | `edit` | Update the content of an existing note |
-| `todo` | Create a new todo |
+| `todo` | Create a new todo (supports --clipboard) |
 | `sync` | Sync notes with the git remote |
 
 ### How it works

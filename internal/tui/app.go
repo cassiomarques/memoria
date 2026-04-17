@@ -1080,14 +1080,23 @@ func (a *App) executeCommand(cmd *Command) tea.Cmd {
 
 func (a *App) cmdNew(args []string) tea.Cmd {
 	if len(args) == 0 {
-		a.setMessage("Usage: new <path> [tag1 tag2...]", true)
+		a.setMessage("Usage: new <path> [tag1 tag2...] [--clipboard]", true)
 		return nil
 	}
 
-	path := args[0]
+	var path string
 	var tags []string
-	if len(args) > 1 {
-		tags = args[1:]
+	fromClipboard := false
+
+	for _, arg := range args {
+		switch {
+		case arg == "--clipboard":
+			fromClipboard = true
+		case path == "":
+			path = arg
+		default:
+			tags = append(tags, arg)
+		}
 	}
 
 	if a.svc == nil {
@@ -1095,7 +1104,20 @@ func (a *App) cmdNew(args []string) tea.Cmd {
 		return nil
 	}
 
-	_, err := a.svc.Create(path, "", tags)
+	var content string
+	if fromClipboard {
+		cb, err := clipboard.ReadAll()
+		if err != nil {
+			a.setMessage("Clipboard read failed: "+err.Error(), true)
+			return nil
+		}
+		if cb == "" {
+			a.setMessage("⚠️ Clipboard is empty, creating note without content", false)
+		}
+		content = cb
+	}
+
+	_, err := a.svc.Create(path, content, tags)
 	if err != nil {
 		a.setMessage("Create failed: "+err.Error(), true)
 		return nil
@@ -1103,14 +1125,25 @@ func (a *App) cmdNew(args []string) tea.Cmd {
 
 	_ = a.refreshNoteList()
 	a.refreshTags()
+
+	if fromClipboard && content != "" {
+		a.noteList.SelectByPath(path)
+		if a.preview.Visible() {
+			if sel := a.noteList.SelectedItem(); sel != nil {
+				a.loadPreview(sel)
+			}
+		}
+		a.setMessage("📋 Created from clipboard: "+path, false)
+		return clearMessageCmd()
+	}
 	return a.openInEditor(path, 0)
 }
 
 // cmdTodo creates a new todo note.
-// Syntax: :todo <title words> [#tag1 #tag2] [@due(YYYY-MM-DD)] [--folder <path>]
+// Syntax: :todo <title words> [#tag1 #tag2] [@due(YYYY-MM-DD)] [--folder <path>] [--clipboard]
 func (a *App) cmdTodo(args []string) tea.Cmd {
 	if len(args) == 0 {
-		a.setMessage("Usage: todo <title> [#tag] [@due(YYYY-MM-DD)] [--folder <path>]", true)
+		a.setMessage("Usage: todo <title> [#tag] [@due(YYYY-MM-DD)] [--folder <path>] [--clipboard]", true)
 		return nil
 	}
 
@@ -1122,6 +1155,7 @@ func (a *App) cmdTodo(args []string) tea.Cmd {
 	var titleWords []string
 	var tags []string
 	var dueDate *time.Time
+	fromClipboard := false
 	folder := a.defaultTodoFolder
 	if folder == "" {
 		folder = "TODO"
@@ -1130,6 +1164,8 @@ func (a *App) cmdTodo(args []string) tea.Cmd {
 	for i := 0; i < len(args); i++ {
 		arg := args[i]
 		switch {
+		case arg == "--clipboard":
+			fromClipboard = true
 		case arg == "--folder" && i+1 < len(args):
 			i++
 			folder = args[i]
@@ -1157,11 +1193,25 @@ func (a *App) cmdTodo(args []string) tea.Cmd {
 		return nil
 	}
 
+	var content string
+	if fromClipboard {
+		cb, err := clipboard.ReadAll()
+		if err != nil {
+			a.setMessage("Clipboard read failed: "+err.Error(), true)
+			return nil
+		}
+		if cb == "" {
+			a.setMessage("⚠️ Clipboard is empty, creating todo without content", false)
+		}
+		content = cb
+	}
+
 	opts := service.CreateTodoOptions{
-		Title:  title,
-		Folder: folder,
-		Tags:   tags,
-		Due:    dueDate,
+		Title:   title,
+		Folder:  folder,
+		Tags:    tags,
+		Due:     dueDate,
+		Content: content,
 	}
 
 	n, err := a.svc.CreateTodo(opts)
@@ -1178,7 +1228,11 @@ func (a *App) cmdTodo(args []string) tea.Cmd {
 			a.loadPreview(sel)
 		}
 	}
-	a.setMessage("⭕ Created todo: "+title, false)
+	if fromClipboard && content != "" {
+		a.setMessage("📋 Created todo from clipboard: "+title, false)
+	} else {
+		a.setMessage("⭕ Created todo: "+title, false)
+	}
 	return clearMessageCmd()
 }
 
@@ -1792,7 +1846,7 @@ func (a *App) cmdHelp() {
 
 | Command | Description |
 |---------|-------------|
-| **new** *path* [tags...] | Create a new note and open in editor |
+| **new** *path* [tags...] [--clipboard] | Create a new note (from clipboard or open editor) |
 | **open** *path* | Open a note in your editor |
 | **search** *query* | Fuzzy search notes |
 | **recent** [N] | Show N most recently modified notes (default 20) |
@@ -1805,7 +1859,7 @@ func (a *App) cmdHelp() {
 | **rename** *new-name* | Rename selected note (stays in same folder) |
 | **rm** *path* | Trash a note |
 | **tags** | Show all tags |
-| **todo** *title* [#tag] [@due(YYYY-MM-DD)] [--folder *path*] | Create a todo note |
+| **todo** *title* [#tag] [@due(YYYY-MM-DD)] [--folder *path*] [--clipboard] | Create a todo note |
 | **todo-due** *YYYY-MM-DD* / **clear** | Set or clear due date on selected todo |
 | **todos** [*filter*] | Show todos (filters: overdue, today, pending, done, archived) |
 | **trash** | Open trash view (browse/restore/delete trashed notes) |

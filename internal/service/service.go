@@ -789,10 +789,11 @@ func (s *NoteService) EnsureFrontmatter() (int, error) {
 
 // CreateTodoOptions holds the parameters for creating a todo note.
 type CreateTodoOptions struct {
-	Title  string
-	Folder string
-	Tags   []string
-	Due    *time.Time
+	Title   string
+	Folder  string
+	Tags    []string
+	Due     *time.Time
+	Content string
 }
 
 // CreateTodo creates a new todo note with the given options.
@@ -805,7 +806,7 @@ func (s *NoteService) CreateTodo(opts CreateTodoOptions) (*note.Note, error) {
 
 	path := filepath.Join(opts.Folder, slug+".md")
 
-	n, err := note.NewNote(path, "", opts.Tags)
+	n, err := note.NewNote(path, opts.Content, opts.Tags)
 	if err != nil {
 		return nil, fmt.Errorf("creating todo: %w", err)
 	}

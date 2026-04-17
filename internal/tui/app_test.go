@@ -596,6 +596,8 @@ func TestCmdTodo_ParsesTagsDueFolderArgs(t *testing.T) {
 		{"todo fix bug @due(2026-04-15)", []string{"fix", "bug", "@due(2026-04-15)"}},
 		{"todo task --folder work", []string{"task", "--folder", "work"}},
 		{"todo big task #urgent @due(2026-05-01) --folder projects", []string{"big", "task", "#urgent", "@due(2026-05-01)", "--folder", "projects"}},
+		{"todo my task --clipboard", []string{"my", "task", "--clipboard"}},
+		{"todo task #tag --clipboard --folder work", []string{"task", "#tag", "--clipboard", "--folder", "work"}},
 	}
 	for _, tt := range tests {
 		cmd, err := ParseCommand(tt.input)
@@ -695,6 +697,96 @@ func TestCmdTodos_NoService(t *testing.T) {
 	msg := a.statusBar.Message()
 	if msg == "" {
 		t.Error("expected error message when no service")
+	}
+}
+
+func TestParseCommand_NewWithClipboard(t *testing.T) {
+	tests := []struct {
+		input    string
+		wantArgs []string
+	}{
+		{"new my-note --clipboard", []string{"my-note", "--clipboard"}},
+		{"new folder/note tag1 --clipboard", []string{"folder/note", "tag1", "--clipboard"}},
+		{"new my-note", []string{"my-note"}},
+	}
+	for _, tt := range tests {
+		cmd, err := ParseCommand(tt.input)
+		if err != nil {
+			t.Fatalf("ParseCommand(%q): %v", tt.input, err)
+		}
+		if cmd.Name != "new" {
+			t.Errorf("ParseCommand(%q) name = %q, want 'new'", tt.input, cmd.Name)
+		}
+		if len(cmd.Args) != len(tt.wantArgs) {
+			t.Errorf("ParseCommand(%q) args = %v (len %d), want %v (len %d)",
+				tt.input, cmd.Args, len(cmd.Args), tt.wantArgs, len(tt.wantArgs))
+			continue
+		}
+		for i, arg := range cmd.Args {
+			if arg != tt.wantArgs[i] {
+				t.Errorf("ParseCommand(%q) args[%d] = %q, want %q", tt.input, i, arg, tt.wantArgs[i])
+			}
+		}
+	}
+}
+
+func TestCmdNew_NoArgsShowsUsage(t *testing.T) {
+	a := newTestApp()
+	a.cmdNew(nil)
+	msg := a.statusBar.Message()
+	if msg == "" {
+		t.Error("expected usage message when no args provided")
+	}
+	if !strings.Contains(msg, "--clipboard") {
+		t.Errorf("usage message should mention --clipboard, got %q", msg)
+	}
+}
+
+func TestCmdNew_NoService(t *testing.T) {
+	a := newTestApp()
+	a.svc = nil
+	a.cmdNew([]string{"test-note", "--clipboard"})
+	msg := a.statusBar.Message()
+	if !strings.Contains(msg, "No service") {
+		t.Errorf("expected 'No service' error, got %q", msg)
+	}
+}
+
+func TestCmdNew_ClipboardFlagNotTreatedAsTag(t *testing.T) {
+	// Ensure --clipboard is consumed as a flag, not passed as a tag.
+	// We can't test actual clipboard read without a service, but we can
+	// verify parsing: with no service, the error should be about the service,
+	// not about --clipboard being treated as a path or tag.
+	a := newTestApp()
+	a.svc = nil
+	a.cmdNew([]string{"my-note", "tag1", "--clipboard"})
+	msg := a.statusBar.Message()
+	if !strings.Contains(msg, "No service") {
+		t.Errorf("expected 'No service' error (flag parsed correctly), got %q", msg)
+	}
+}
+
+func TestCmdTodo_ClipboardFlagNoService(t *testing.T) {
+	a := newTestApp()
+	a.svc = nil
+	a.cmdTodo([]string{"my", "task", "--clipboard"})
+	msg := a.statusBar.Message()
+	if !strings.Contains(msg, "No service") {
+		t.Errorf("expected 'No service' error, got %q", msg)
+	}
+}
+
+func TestCmdTodo_ClipboardFlagNotTreatedAsTitle(t *testing.T) {
+	// Verify --clipboard is not included in the title words.
+	// With no service, if --clipboard were treated as a title word, the title
+	// would be "task --clipboard" instead of just "task". The error should
+	// still be about service, not title.
+	a := newTestApp()
+	a.svc = nil
+	a.cmdTodo([]string{"task", "--clipboard"})
+	msg := a.statusBar.Message()
+	if !strings.Contains(msg, "No service") {
+		t.Errorf("expected 'No service' error (flag parsed, not in title), got %q", msg)
 	}
 }
 

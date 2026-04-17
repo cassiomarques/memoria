@@ -116,6 +116,55 @@ func TestCreateWithMDExtension(t *testing.T) {
 	}
 }
 
+func TestCreateWithContent(t *testing.T) {
+	svc := setupService(t)
+
+	content := "# Meeting Notes\n\nDiscussed the roadmap for Q3."
+	n, err := svc.Create("meeting-notes", content, []string{"work"})
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+
+	// Verify content is persisted on disk
+	loaded, err := svc.Get(n.Path)
+	if err != nil {
+		t.Fatalf("Get: %v", err)
+	}
+	if !strings.Contains(loaded.Content, "Discussed the roadmap for Q3.") {
+		t.Errorf("expected content to contain original text, got %q", loaded.Content)
+	}
+
+	// Verify search index includes the content
+	results, err := svc.Search("roadmap", 10)
+	if err != nil {
+		t.Fatalf("Search: %v", err)
+	}
+	if len(results) != 1 {
+		t.Errorf("expected 1 search result for 'roadmap', got %d", len(results))
+	}
+}
+
+func TestCreateWithEmptyContent(t *testing.T) {
+	svc := setupService(t)
+
+	n, err := svc.Create("empty-note", "", nil)
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+
+	// Should exist on disk and in metadata even with empty content
+	if !svc.files.Exists(n.Path) {
+		t.Error("note file should exist on disk")
+	}
+	nm, err := svc.meta.GetNote(n.Path)
+	if err != nil {
+		t.Fatalf("GetNote: %v", err)
+	}
+	if nm.Title != "empty-note" {
+		t.Errorf("expected title 'empty-note', got %q", nm.Title)
+	}
+}
+
 func TestCreateThenOpen(t *testing.T) {
 	svc := setupService(t)
 
@@ -1418,6 +1467,68 @@ func TestCreateTodo_EmptyTitle(t *testing.T) {
 	})
 	if err == nil {
 		t.Error("expected error for empty title")
+	}
+}
+
+func TestCreateTodo_WithContent(t *testing.T) {
+	svc := setupService(t)
+
+	content := "Steps to reproduce:\n1. Open the app\n2. Click submit"
+	n, err := svc.CreateTodo(CreateTodoOptions{
+		Title:   "fix submit bug",
+		Folder:  "TODO",
+		Tags:    []string{"bug"},
+		Content: content,
+	})
+	if err != nil {
+		t.Fatalf("CreateTodo: %v", err)
+	}
+
+	// Verify content is persisted on disk
+	loaded, err := svc.Get(n.Path)
+	if err != nil {
+		t.Fatalf("Get: %v", err)
+	}
+	if !strings.Contains(loaded.Content, "Steps to reproduce") {
+		t.Errorf("expected content to contain original text, got %q", loaded.Content)
+	}
+
+	// Verify todo metadata still correct
+	if !loaded.Todo {
+		t.Error("expected Todo=true")
+	}
+	if loaded.Done {
+		t.Error("expected Done=false")
+	}
+
+	// Verify searchable
+	results, err := svc.Search("reproduce", 10)
+	if err != nil {
+		t.Fatalf("Search: %v", err)
+	}
+	if len(results) != 1 {
+		t.Errorf("expected 1 search result for 'reproduce', got %d", len(results))
+	}
+}
+
+func TestCreateTodo_WithEmptyContent(t *testing.T) {
+	svc := setupService(t)
+
+	n, err := svc.CreateTodo(CreateTodoOptions{
+		Title:   "empty content todo",
+		Folder:  "TODO",
+		Content: "",
+	})
+	if err != nil {
+		t.Fatalf("CreateTodo: %v", err)
+	}
+
+	loaded, err := svc.Get(n.Path)
+	if err != nil {
+		t.Fatalf("Get: %v", err)
+	}
+	if !loaded.Todo {
+		t.Error("expected Todo=true even with empty content")
 	}
 }
 
