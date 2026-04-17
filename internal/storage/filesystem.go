@@ -168,10 +168,14 @@ func (fs *FileStore) ListAll() ([]*note.Note, error) {
 
 	err := filepath.Walk(fs.root, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
+			if os.IsNotExist(err) {
+				return nil // skip files/dirs that vanish during walk (e.g. git repacking)
+			}
 			return err
 		}
 		if info.IsDir() {
-			if info.Name() == ".trash" {
+			name := info.Name()
+			if name == ".trash" || name == ".git" {
 				return filepath.SkipDir
 			}
 			return nil
