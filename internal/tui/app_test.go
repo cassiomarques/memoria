@@ -1,12 +1,16 @@
 package tui
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
+	"github.com/cassiomarques/memoria/internal/editor"
 	"github.com/cassiomarques/memoria/internal/search"
+	"github.com/cassiomarques/memoria/internal/service"
+	"github.com/cassiomarques/memoria/internal/storage"
 	"github.com/cassiomarques/memoria/internal/tui/components"
 )
 
@@ -787,6 +791,186 @@ func TestCmdTodo_ClipboardFlagNotTreatedAsTitle(t *testing.T) {
 	msg := a.statusBar.Message()
 	if !strings.Contains(msg, "No service") {
 		t.Errorf("expected 'No service' error (flag parsed, not in title), got %q", msg)
+	}
+}
+
+// fakeClipboard is a test double for ClipboardProvider.
+type fakeClipboard struct {
+	content string
+	readErr error
+}
+
+func (f *fakeClipboard) ReadAll() (string, error) { return f.content, f.readErr }
+func (f *fakeClipboard) WriteAll(text string) error {
+	f.content = text
+	return nil
+}
+
+// newTestAppWithService creates an App wired to a real in-memory service
+// and a fake clipboard for end-to-end command testing.
+func newTestAppWithService(t *testing.T, cb *fakeClipboard) App {
+	t.Helper()
+
+	files, err := storage.NewFileStore(t.TempDir())
+	if err != nil {
+		t.Fatalf("NewFileStore: %v", err)
+	}
+	meta, err := storage.NewMemoryMetaStore()
+	if err != nil {
+		t.Fatalf("NewMemoryMetaStore: %v", err)
+	}
+	t.Cleanup(func() { meta.Close() })
+	idx, err := search.NewMemorySearchIndex()
+	if err != nil {
+		t.Fatalf("NewMemorySearchIndex: %v", err)
+	}
+	t.Cleanup(func() { idx.Close() })
+
+	svc := service.New(files, meta, idx, nil, editor.New("cat"))
+	t.Cleanup(func() { svc.Close() })
+
+	a := NewApp()
+	a.svc = svc
+	a.clipboard = cb
+	a.noteList.SetSize(80, 40)
+	a.width = 80
+	a.height = 24
+	return a
+}
+
+func TestCmdNew_ClipboardCreatesNoteWithContent(t *testing.T) {
+	cb := &fakeClipboard{content: "# Pasted content\n\nHello from clipboard"}
+	a := newTestAppWithService(t, cb)
+
+	a.cmdNew([]string{"pasted-note", "--clipboard"})
+
+	msg := a.statusBar.Message()
+	if !strings.Contains(msg, "Created from clipboard") {
+		t.Errorf("expected clipboard success message, got %q", msg)
+	}
+
+	// Verify the note was created with the clipboard content
+	n, err := a.svc.Get("pasted-note.md")
+	if err != nil {
+		t.Fatalf("Get: %v", err)
+	}
+	if !strings.Contains(n.Content, "Hello from clipboard") {
+		t.Errorf("note content should contain clipboard text, got %q", n.Content)
+	}
+}
+
+func TestCmdNew_ClipboardEmptyShowsWarning(t *testing.T) {
+	cb := &fakeClipboard{content: ""}
+	a := newTestAppWithService(t, cb)
+
+	a.cmdNew([]string{"empty-clip", "--clipboard"})
+
+	msg := a.statusBar.Message()
+	if !strings.Contains(msg, "Clipboard is empty") {
+		t.Errorf("expected empty clipboard warning, got %q", msg)
+	}
+
+	// Note should still be created (just empty body)
+	if _, err := a.svc.Get("empty-clip.md"); err != nil {
+		t.Error("note should exist even with empty clipboard")
+	}
+}
+
+func TestCmdNew_ClipboardReadErrorShowsError(t *testing.T) {
+	cb := &fakeClipboard{readErr: fmt.Errorf("no display")}
+	a := newTestAppWithService(t, cb)
+
+	a.cmdNew([]string{"fail-note", "--clipboard"})
+
+	msg := a.statusBar.Message()
+	if !strings.Contains(msg, "Clipboard read failed") {
+		t.Errorf("expected clipboard error message, got %q", msg)
+	}
+
+	// Note should NOT be created when clipboard read fails
+	if _, err := a.svc.Get("fail-note.md"); err == nil {
+		t.Error("note should not be created when clipboard read fails")
+	}
+}
+
+func TestCmdNew_WithoutClipboardOpensEditor(t *testing.T) {
+	cb := &fakeClipboard{content: "should not be used"}
+	a := newTestAppWithService(t, cb)
+
+	// Without --clipboard, cmdNew returns a tea.Cmd (to open editor)
+	cmd := a.cmdNew([]string{"regular-note"})
+
+	// Should return a command (editor open), not nil
+	if cmd == nil {
+		t.Error("expected non-nil cmd (editor open) when --clipboard not used")
+	}
+
+	// Note should exist
+	if _, err := a.svc.Get("regular-note.md"); err != nil {
+		t.Error("note should be created")
+	}
+}
+
+func TestCmdTodo_ClipboardCreatesWithContent(t *testing.T) {
+	cb := &fakeClipboard{content: "Steps to reproduce:\n1. Open app\n2. Click submit"}
+	a := newTestAppWithService(t, cb)
+
+	a.cmdTodo([]string{"fix", "submit", "bug", "--clipboard"})
+
+	msg := a.statusBar.Message()
+	if !strings.Contains(msg, "Created todo from clipboard") {
+		t.Errorf("expected clipboard success message, got %q", msg)
+	}
+
+	n, err := a.svc.Get("TODO/fix-submit-bug.md")
+	if err != nil {
+		t.Fatalf("Get: %v", err)
+	}
+	if !strings.Contains(n.Content, "Steps to reproduce") {
+		t.Errorf("todo content should contain clipboard text, got %q", n.Content)
+	}
+	if !n.Todo {
+		t.Error("expected Todo=true")
+	}
+}
+
+func TestCmdTodo_ClipboardWithTagsAndDue(t *testing.T) {
+	cb := &fakeClipboard{content: "Bug details from Slack"}
+	a := newTestAppWithService(t, cb)
+
+	a.cmdTodo([]string{"fix", "bug", "#urgent", "@due(2026-05-01)", "--clipboard"})
+
+	n, err := a.svc.Get("TODO/fix-bug.md")
+	if err != nil {
+		t.Fatalf("Get: %v", err)
+	}
+	if !strings.Contains(n.Content, "Bug details from Slack") {
+		t.Errorf("expected clipboard content, got %q", n.Content)
+	}
+	if len(n.Tags) != 1 || n.Tags[0] != "urgent" {
+		t.Errorf("expected tags=[urgent], got %v", n.Tags)
+	}
+	if n.Due == nil || n.Due.Format("2006-01-02") != "2026-05-01" {
+		t.Errorf("expected due=2026-05-01, got %v", n.Due)
+	}
+}
+
+func TestCopyPreview_UsesClipboardInterface(t *testing.T) {
+	cb := &fakeClipboard{}
+	a := newTestAppWithService(t, cb)
+
+	// Create a note and load its preview
+	a.svc.Create("copy-test.md", "Some content to copy", nil)
+	a.preview.SetContent("copy-test", "Some content to copy")
+
+	a.copyPreviewToClipboard()
+
+	if cb.content != "Some content to copy" {
+		t.Errorf("expected clipboard to contain preview content, got %q", cb.content)
+	}
+	msg := a.statusBar.Message()
+	if !strings.Contains(msg, "Copied to clipboard") {
+		t.Errorf("expected copy success message, got %q", msg)
 	}
 }
 

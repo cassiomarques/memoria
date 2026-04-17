@@ -67,12 +67,26 @@ type gitSyncMsg struct {
 	Err error
 }
 
+// ClipboardProvider abstracts clipboard read/write so it can be replaced in tests.
+type ClipboardProvider interface {
+	ReadAll() (string, error)
+	WriteAll(text string) error
+}
+
+// systemClipboard delegates to the atotto/clipboard package.
+type systemClipboard struct{}
+
+func (systemClipboard) ReadAll() (string, error)   { return clipboard.ReadAll() }
+func (systemClipboard) WriteAll(text string) error { return clipboard.WriteAll(text) }
+
 // App is the root Bubble Tea model that composes all TUI components.
 type App struct {
 	noteList   components.NoteList
 	commandBar components.CommandBar
 	statusBar  components.StatusBar
 	preview    components.Preview
+
+	clipboard ClipboardProvider
 
 	focusedPane focusedPane
 	// Track which note is currently previewed
@@ -126,6 +140,7 @@ func NewApp() App {
 		preview:     components.NewPreview(),
 		focusedPane: focusList,
 		styles:      theme.DefaultStyles(),
+		clipboard:   systemClipboard{},
 	}
 }
 
@@ -798,7 +813,7 @@ func (a *App) copyPreviewToClipboard() {
 		a.setMessage("Nothing to copy", false)
 		return
 	}
-	if err := clipboard.WriteAll(content); err != nil {
+	if err := a.clipboard.WriteAll(content); err != nil {
 		a.setMessage("Copy failed: "+err.Error(), true)
 		return
 	}
@@ -1106,7 +1121,7 @@ func (a *App) cmdNew(args []string) tea.Cmd {
 
 	var content string
 	if fromClipboard {
-		cb, err := clipboard.ReadAll()
+		cb, err := a.clipboard.ReadAll()
 		if err != nil {
 			a.setMessage("Clipboard read failed: "+err.Error(), true)
 			return nil
@@ -1195,7 +1210,7 @@ func (a *App) cmdTodo(args []string) tea.Cmd {
 
 	var content string
 	if fromClipboard {
-		cb, err := clipboard.ReadAll()
+		cb, err := a.clipboard.ReadAll()
 		if err != nil {
 			a.setMessage("Clipboard read failed: "+err.Error(), true)
 			return nil
