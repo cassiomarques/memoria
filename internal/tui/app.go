@@ -169,6 +169,7 @@ func NewAppWithService(svc *service.NoteService, opts AppOptions) App {
 		focusedPane:       focusList,
 		styles:            theme.DefaultStyles(),
 		svc:               svc,
+		clipboard:         systemClipboard{},
 		version:           opts.Version,
 		defaultTodoFolder: opts.DefaultTodoFolder,
 	}

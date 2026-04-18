@@ -838,6 +838,30 @@ func newTestAppWithService(t *testing.T, cb *fakeClipboard) App {
 	return a
 }
 
+func TestNewAppWithService_SetsClipboard(t *testing.T) {
+	files, err := storage.NewFileStore(t.TempDir())
+	if err != nil {
+		t.Fatalf("NewFileStore: %v", err)
+	}
+	meta, err := storage.NewMemoryMetaStore()
+	if err != nil {
+		t.Fatalf("NewMemoryMetaStore: %v", err)
+	}
+	t.Cleanup(func() { meta.Close() })
+	idx, err := search.NewMemorySearchIndex()
+	if err != nil {
+		t.Fatalf("NewMemorySearchIndex: %v", err)
+	}
+	t.Cleanup(func() { idx.Close() })
+	svc := service.New(files, meta, idx, nil, editor.New("cat"))
+	t.Cleanup(func() { svc.Close() })
+
+	a := NewAppWithService(svc, AppOptions{})
+	if a.clipboard == nil {
+		t.Fatal("NewAppWithService must set clipboard provider")
+	}
+}
+
 func TestCmdNew_ClipboardCreatesNoteWithContent(t *testing.T) {
 	cb := &fakeClipboard{content: "# Pasted content\n\nHello from clipboard"}
 	a := newTestAppWithService(t, cb)
