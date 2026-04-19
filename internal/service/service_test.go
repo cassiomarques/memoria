@@ -1351,6 +1351,130 @@ func TestMoveFolder_NestedNotes(t *testing.T) {
 	}
 }
 
+func TestMoveFolder_IntoExistingFolder(t *testing.T) {
+	svc := setupService(t)
+
+	// Create two folders with notes
+	_, err := svc.Create("FolderA/note1", "From A", []string{"a"})
+	if err != nil {
+		t.Fatalf("Create A/note1: %v", err)
+	}
+	_, err = svc.Create("FolderB/note2", "From B", nil)
+	if err != nil {
+		t.Fatalf("Create B/note2: %v", err)
+	}
+
+	// Move FolderA into FolderB → should result in FolderB/FolderA/note1.md
+	if err := svc.Move("FolderA", "FolderB"); err != nil {
+		t.Fatalf("Move folder into folder: %v", err)
+	}
+
+	// Old folder should be gone
+	oldDir := filepath.Join(svc.files.Root(), "FolderA")
+	if _, statErr := os.Stat(oldDir); !os.IsNotExist(statErr) {
+		t.Error("old folder FolderA still exists on disk")
+	}
+
+	// Note should be at new nested path
+	if !svc.files.Exists("FolderB/FolderA/note1.md") {
+		t.Error("expected FolderB/FolderA/note1.md to exist on disk")
+	}
+
+	// Metadata should be updated
+	nm, getErr := svc.meta.GetNote("FolderB/FolderA/note1.md")
+	if getErr != nil {
+		t.Fatalf("GetNote: %v", getErr)
+	}
+	if nm.Folder != "FolderB/FolderA" {
+		t.Errorf("expected folder 'FolderB/FolderA', got %q", nm.Folder)
+	}
+
+	// Original note in FolderB should be untouched
+	if !svc.files.Exists("FolderB/note2.md") {
+		t.Error("expected FolderB/note2.md to still exist")
+	}
+}
+
+func TestMoveFolder_IntoExistingFolder_WithNestedNotes(t *testing.T) {
+	svc := setupService(t)
+
+	// Create folder with nested sub-folders
+	_, err := svc.Create("Src/note1", "Top level", nil)
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	_, err = svc.Create("Src/Sub/note2", "Nested", nil)
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	_, err = svc.Create("Dest/existing", "Already here", nil)
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+
+	// Move Src into Dest → Dest/Src/note1.md and Dest/Src/Sub/note2.md
+	if err := svc.Move("Src", "Dest"); err != nil {
+		t.Fatalf("Move: %v", err)
+	}
+
+	// Verify top-level note moved
+	if !svc.files.Exists("Dest/Src/note1.md") {
+		t.Error("expected Dest/Src/note1.md to exist")
+	}
+	nm, getErr := svc.meta.GetNote("Dest/Src/note1.md")
+	if getErr != nil {
+		t.Fatalf("GetNote Dest/Src/note1.md: %v", getErr)
+	}
+	if nm.Folder != "Dest/Src" {
+		t.Errorf("expected folder 'Dest/Src', got %q", nm.Folder)
+	}
+
+	// Verify nested note moved
+	if !svc.files.Exists("Dest/Src/Sub/note2.md") {
+		t.Error("expected Dest/Src/Sub/note2.md to exist")
+	}
+	nm2, getErr := svc.meta.GetNote("Dest/Src/Sub/note2.md")
+	if getErr != nil {
+		t.Fatalf("GetNote Dest/Src/Sub/note2.md: %v", getErr)
+	}
+	if nm2.Folder != "Dest/Src/Sub" {
+		t.Errorf("expected folder 'Dest/Src/Sub', got %q", nm2.Folder)
+	}
+
+	// Original dest note untouched
+	if !svc.files.Exists("Dest/existing.md") {
+		t.Error("expected Dest/existing.md to still exist")
+	}
+}
+
+func TestMoveFolder_IntoExistingFolder_DestinationCollision(t *testing.T) {
+	svc := setupService(t)
+
+	// Create FolderA, FolderB, and FolderB/FolderA (collision target)
+	_, err := svc.Create("FolderA/note1", "From A", nil)
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	_, err = svc.Create("FolderB/FolderA/note2", "Already here", nil)
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+
+	// Move FolderA into FolderB — should fail because FolderB/FolderA exists
+	err = svc.Move("FolderA", "FolderB")
+	if err == nil {
+		t.Fatal("expected error when destination already exists, got nil")
+	}
+	if !strings.Contains(err.Error(), "already exists") {
+		t.Errorf("expected 'already exists' error, got: %v", err)
+	}
+
+	// Original should be untouched
+	if !svc.files.Exists("FolderA/note1.md") {
+		t.Error("expected FolderA/note1.md to still exist after failed move")
+	}
+}
+
 // --- Todo integration tests ---
 
 func TestCreateTodo(t *testing.T) {

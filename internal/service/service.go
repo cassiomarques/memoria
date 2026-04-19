@@ -460,14 +460,32 @@ func (s *NoteService) Move(oldPath, newPath string) error {
 }
 
 // moveFolder renames a folder by moving all notes inside it to the new folder path.
+// If newFolder already exists as a directory, oldFolder is moved inside it
+// (e.g. mv A B where B exists → B/A).
 func (s *NoteService) moveFolder(oldFolder, newFolder string) error {
 	if oldFolder == newFolder {
 		return nil
 	}
 
+	// If the destination is an existing directory, nest oldFolder inside it.
+	if s.files != nil {
+		info, err := os.Stat(s.files.AbsPath(newFolder))
+		if err == nil && info.IsDir() {
+			newFolder = filepath.Join(newFolder, filepath.Base(oldFolder))
+			if oldFolder == newFolder {
+				return nil
+			}
+		}
+	}
+
 	// Rename the directory on disk
 	absOld := s.files.AbsPath(oldFolder)
 	absNew := s.files.AbsPath(newFolder)
+
+	// Preflight: reject if the resolved destination already exists.
+	if _, err := os.Stat(absNew); err == nil {
+		return fmt.Errorf("destination %s already exists", newFolder)
+	}
 
 	if err := os.MkdirAll(filepath.Dir(absNew), 0o755); err != nil {
 		return fmt.Errorf("creating parent dirs: %w", err)
