@@ -1656,11 +1656,33 @@ func (a *App) cmdTags() tea.Cmd {
 }
 
 func (a *App) cmdTodos(args string) tea.Cmd {
-	// Parse optional filter: overdue, today, pending, done, archived
+	// Parse filter and optional time range.
+	// Supported: "overdue", "today", "pending", "done", "archived",
+	//            "completed", "completed 2 weeks", "completed 1 month"
 	filter := strings.TrimSpace(strings.ToLower(args))
-	validFilters := map[string]bool{"": true, "overdue": true, "today": true, "pending": true, "done": true, "archived": true}
-	if !validFilters[filter] {
-		a.setMessage("Unknown filter: "+filter+" (use overdue, today, pending, done, archived)", true)
+
+	// Extract time range for "completed" filter (e.g. "completed 2 weeks")
+	var completedSince *time.Time
+	filterKey := filter
+	if strings.HasPrefix(filter, "completed") {
+		filterKey = "completed"
+		rangeStr := strings.TrimSpace(strings.TrimPrefix(filter, "completed"))
+		if rangeStr != "" {
+			since, err := note.ParseDueInput(rangeStr, time.Now())
+			if err != nil {
+				a.setMessage("Invalid time range: "+rangeStr+" (use e.g. \"2 weeks\", \"1 month\")", true)
+				return nil
+			}
+			// ParseDueInput returns a future date; we want "since" = now - duration
+			diff := time.Until(since)
+			cutoff := time.Now().Add(-diff)
+			completedSince = &cutoff
+		}
+	}
+
+	validFilters := map[string]bool{"": true, "overdue": true, "today": true, "pending": true, "done": true, "archived": true, "completed": true}
+	if !validFilters[filterKey] {
+		a.setMessage("Unknown filter: "+filter+" (use overdue, today, pending, done, archived, completed)", true)
 		return nil
 	}
 
@@ -1671,9 +1693,25 @@ func (a *App) cmdTodos(args string) tea.Cmd {
 
 	var todos []*storage.NoteMeta
 	var err error
-	if filter == "archived" {
+	switch filterKey {
+	case "archived":
 		todos, err = a.svc.ListArchivedTodos()
-	} else {
+	case "completed":
+		// Merge live (done) + archived for a complete picture
+		live, liveErr := a.svc.ListTodos()
+		if liveErr != nil {
+			a.setMessage("Todos failed: "+liveErr.Error(), true)
+			return nil
+		}
+		archived, archErr := a.svc.ListArchivedTodos()
+		if archErr != nil {
+			a.setMessage("Todos failed: "+archErr.Error(), true)
+			return nil
+		}
+		todos = make([]*storage.NoteMeta, 0, len(live)+len(archived))
+		todos = append(todos, live...)
+		todos = append(todos, archived...)
+	default:
 		todos, err = a.svc.ListTodos()
 	}
 	if err != nil {
@@ -1700,7 +1738,7 @@ func (a *App) cmdTodos(args string) tea.Cmd {
 	// Apply filter
 	var filtered []*storage.NoteMeta
 	for _, t := range todos {
-		switch filter {
+		switch filterKey {
 		case "overdue":
 			if isOverdue(t) {
 				filtered = append(filtered, t)
@@ -1717,6 +1755,12 @@ func (a *App) cmdTodos(args string) tea.Cmd {
 			if t.Done {
 				filtered = append(filtered, t)
 			}
+		case "completed":
+			if t.Completed != nil {
+				if completedSince == nil || !t.Completed.Before(*completedSince) {
+					filtered = append(filtered, t)
+				}
+			}
 		default:
 			filtered = append(filtered, t)
 		}
@@ -1724,8 +1768,8 @@ func (a *App) cmdTodos(args string) tea.Cmd {
 
 	if len(filtered) == 0 {
 		label := "todos"
-		if filter != "" {
-			label = filter + " todos"
+		if filterKey != "" {
+			label = filterKey + " todos"
 		}
 		a.setMessage("No "+label+" found", false)
 		return nil
@@ -1733,8 +1777,11 @@ func (a *App) cmdTodos(args string) tea.Cmd {
 
 	// Build preview
 	title := "Todos"
-	if filter != "" {
-		title = strings.ToUpper(filter[:1]) + filter[1:] + " Todos"
+	if filterKey == "completed" && completedSince != nil {
+		rangeStr := strings.TrimSpace(strings.TrimPrefix(filter, "completed"))
+		title = "Completed Todos (last " + rangeStr + ")"
+	} else if filterKey != "" {
+		title = strings.ToUpper(filterKey[:1]) + filterKey[1:] + " Todos"
 	}
 
 	var lines []string
@@ -1776,9 +1823,12 @@ func (a *App) cmdTodos(args string) tea.Cmd {
 		lines = append(lines, fmt.Sprintf("- %s **%s**%s%s%s%s", icon, noteTitle, dueStr, completedStr, archivedStr, tagStr))
 	}
 
-	if filter == "archived" {
+	switch filterKey {
+	case "archived":
 		lines = append(lines, fmt.Sprintf("\n*%d archived todos*", len(filtered)))
-	} else {
+	case "completed":
+		lines = append(lines, fmt.Sprintf("\n*%d completed todos*", len(filtered)))
+	default:
 		lines = append(lines, fmt.Sprintf("\n*%d pending, %d done*", pending, done))
 	}
 	a.preview.SetContent(title, strings.Join(lines, "\n"))
@@ -1789,9 +1839,12 @@ func (a *App) cmdTodos(args string) tea.Cmd {
 		a.resizeComponents()
 	}
 
-	if filter == "archived" {
+	switch filterKey {
+	case "archived":
 		a.setMessage(fmt.Sprintf("%d archived todos", len(filtered)), false)
-	} else {
+	case "completed":
+		a.setMessage(fmt.Sprintf("%d completed todos", len(filtered)), false)
+	default:
 		a.setMessage(fmt.Sprintf("%d %s (%d pending)", len(filtered), strings.ToLower(title), pending), false)
 	}
 	return nil

@@ -757,6 +757,70 @@ func TestCmdTodos_NoService(t *testing.T) {
 	}
 }
 
+func TestCmdTodos_CompletedFilter(t *testing.T) {
+	a := newTestAppWithService(t, &fakeClipboard{})
+
+	// Create and complete a todo
+	a.cmdTodo([]string{"done", "task"})
+	_ = a.refreshNoteList()
+
+	// Mark it done
+	items := a.noteList.AllItems()
+	for _, item := range items {
+		if strings.Contains(item.Path, "done-task") {
+			a.noteList.SelectByPath(item.Path)
+			break
+		}
+	}
+	a.toggleTodoDone()
+	_ = a.refreshNoteList()
+
+	// "completed" should show it
+	a.cmdTodos("completed")
+	msg := a.statusBar.Message()
+	if !strings.Contains(msg, "completed") {
+		t.Errorf("expected 'completed' in message, got %q", msg)
+	}
+}
+
+func TestCmdTodos_CompletedWithTimeRange(t *testing.T) {
+	a := newTestAppWithService(t, &fakeClipboard{})
+
+	// Create and complete a todo
+	a.cmdTodo([]string{"recent", "task"})
+	_ = a.refreshNoteList()
+
+	items := a.noteList.AllItems()
+	for _, item := range items {
+		if strings.Contains(item.Path, "recent-task") {
+			a.noteList.SelectByPath(item.Path)
+			break
+		}
+	}
+	a.toggleTodoDone()
+	_ = a.refreshNoteList()
+
+	// "completed 1 month" should include it (just completed now)
+	a.cmdTodos("completed 1 month")
+	msg := a.statusBar.Message()
+	if !strings.Contains(msg, "completed") {
+		t.Errorf("expected 'completed' in message, got %q", msg)
+	}
+	if strings.Contains(msg, "0 completed") {
+		t.Error("expected at least 1 completed todo")
+	}
+}
+
+func TestCmdTodos_CompletedInvalidRange(t *testing.T) {
+	a := newTestAppWithService(t, &fakeClipboard{})
+
+	a.cmdTodos("completed not-valid")
+	msg := a.statusBar.Message()
+	if !strings.Contains(msg, "Invalid time range") {
+		t.Errorf("expected 'Invalid time range' error, got %q", msg)
+	}
+}
+
 func TestParseCommand_NewWithClipboard(t *testing.T) {
 	tests := []struct {
 		input    string

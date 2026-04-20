@@ -299,7 +299,7 @@ func completeTodoCommand(argPart string, noteItems []components.NoteItem) []stri
 
 // completeTodosFilter suggests filter keywords for the :todos command.
 func completeTodosFilter(prefix string) []string {
-	filters := []string{"overdue", "today", "pending", "done", "archived"}
+	filters := []string{"overdue", "today", "pending", "done", "completed", "archived"}
 	prefix = strings.ToLower(strings.TrimSpace(prefix))
 	if prefix == "" {
 		return filters
