@@ -642,6 +642,59 @@ func TestCmdTodo_InvalidDueDateShowsError(t *testing.T) {
 	}
 }
 
+func TestCmdTodo_RelativeDueDate(t *testing.T) {
+	a := newTestAppWithService(t, &fakeClipboard{})
+
+	// Simulate ":todo fix bug @due(2 weeks)" — the parser splits on spaces,
+	// so @due(2 and weeks) arrive as separate args.
+	a.cmdTodo([]string{"fix", "bug", "@due(2", "weeks)"})
+
+	msg := a.statusBar.Message()
+	if strings.Contains(msg, "Invalid") {
+		t.Errorf("unexpected error: %s", msg)
+	}
+
+	// Verify the note was created with a due date ~14 days from now
+	notes, _ := a.svc.ListAll()
+	var found bool
+	for _, n := range notes {
+		if strings.Contains(n.Path, "fix-bug") && n.Due != nil {
+			found = true
+		}
+	}
+	if !found {
+		t.Error("expected todo with due date to be created")
+	}
+}
+
+func TestCmdTodoDue_RelativeDate(t *testing.T) {
+	a := newTestAppWithService(t, &fakeClipboard{})
+
+	// Create a todo first
+	a.cmdTodo([]string{"my", "task"})
+	_ = a.refreshNoteList()
+
+	// Select the todo
+	items := a.noteList.AllItems()
+	for _, item := range items {
+		if strings.Contains(item.Path, "my-task") {
+			a.noteList.SelectByPath(item.Path)
+			break
+		}
+	}
+
+	// Set due date with relative input: ":todo-due 3 days"
+	a.cmdTodoDue([]string{"3", "days"})
+
+	msg := a.statusBar.Message()
+	if strings.Contains(msg, "Invalid") {
+		t.Errorf("unexpected error: %s", msg)
+	}
+	if !strings.Contains(msg, "📅") {
+		t.Errorf("expected success message, got: %s", msg)
+	}
+}
+
 func TestCmdTodo_OnlyTagsNoTitleShowsError(t *testing.T) {
 	a := newTestApp()
 	// Only tags, no title words

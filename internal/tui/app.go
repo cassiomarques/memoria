@@ -1156,10 +1156,10 @@ func (a *App) cmdNew(args []string) tea.Cmd {
 }
 
 // cmdTodo creates a new todo note.
-// Syntax: :todo <title words> [#tag1 #tag2] [@due(YYYY-MM-DD)] [--folder <path>] [--clipboard]
+// Syntax: :todo <title words> [#tag1 #tag2] [@due(YYYY-MM-DD | N days/weeks/months)] [--folder <path>] [--clipboard]
 func (a *App) cmdTodo(args []string) tea.Cmd {
 	if len(args) == 0 {
-		a.setMessage("Usage: todo <title> [#tag] [@due(YYYY-MM-DD)] [--folder <path>] [--clipboard]", true)
+		a.setMessage("Usage: todo <title> [#tag] [@due(YYYY-MM-DD or 2 weeks)] [--folder <path>] [--clipboard]", true)
 		return nil
 	}
 
@@ -1190,11 +1190,24 @@ func (a *App) cmdTodo(args []string) tea.Cmd {
 			if tag != "" {
 				tags = append(tags, tag)
 			}
-		case strings.HasPrefix(arg, "@due(") && strings.HasSuffix(arg, ")"):
-			dateStr := arg[5 : len(arg)-1] // strip @due( and )
-			t, err := time.Parse(time.DateOnly, dateStr)
+		case strings.HasPrefix(arg, "@due("):
+			// Collect tokens until we find one ending with ")"
+			dueTokens := []string{arg[5:]} // strip "@due(" prefix
+			if strings.HasSuffix(arg, ")") {
+				dueTokens[0] = strings.TrimSuffix(dueTokens[0], ")")
+			} else {
+				for i++; i < len(args); i++ {
+					if strings.HasSuffix(args[i], ")") {
+						dueTokens = append(dueTokens, strings.TrimSuffix(args[i], ")"))
+						break
+					}
+					dueTokens = append(dueTokens, args[i])
+				}
+			}
+			dateStr := strings.Join(dueTokens, " ")
+			t, err := note.ParseDueInput(dateStr, time.Now())
 			if err != nil {
-				a.setMessage("Invalid due date (use YYYY-MM-DD): "+dateStr, true)
+				a.setMessage("Invalid due date: "+dateStr, true)
 				return nil
 			}
 			dueDate = &t
@@ -1253,10 +1266,10 @@ func (a *App) cmdTodo(args []string) tea.Cmd {
 }
 
 // cmdTodoDue sets or clears the due date of the currently selected todo.
-// Syntax: :todo-due <YYYY-MM-DD> or :todo-due clear
+// Syntax: :todo-due <YYYY-MM-DD | N days/weeks/months> or :todo-due clear
 func (a *App) cmdTodoDue(args []string) tea.Cmd {
 	if len(args) == 0 {
-		a.setMessage("Usage: todo-due <YYYY-MM-DD> or todo-due clear", true)
+		a.setMessage("Usage: todo-due <YYYY-MM-DD or 2 weeks> or todo-due clear", true)
 		return nil
 	}
 
@@ -1272,9 +1285,10 @@ func (a *App) cmdTodoDue(args []string) tea.Cmd {
 
 	var due *time.Time
 	if !strings.EqualFold(args[0], "clear") {
-		t, err := time.Parse(time.DateOnly, args[0])
+		input := strings.Join(args, " ")
+		t, err := note.ParseDueInput(input, time.Now())
 		if err != nil {
-			a.setMessage("Invalid date (use YYYY-MM-DD): "+args[0], true)
+			a.setMessage("Invalid date (use YYYY-MM-DD or e.g. \"2 weeks\"): "+input, true)
 			return nil
 		}
 		due = &t
@@ -1875,8 +1889,8 @@ func (a *App) cmdHelp() {
 | **rename** *new-name* | Rename selected note (stays in same folder) |
 | **rm** *path* | Trash a note |
 | **tags** | Show all tags |
-| **todo** *title* [#tag] [@due(YYYY-MM-DD)] [--folder *path*] [--clipboard] | Create a todo note |
-| **todo-due** *YYYY-MM-DD* / **clear** | Set or clear due date on selected todo |
+| **todo** *title* [#tag] [@due(YYYY-MM-DD or 2 weeks)] [--folder *path*] [--clipboard] | Create a todo note |
+| **todo-due** *YYYY-MM-DD* or *N days/weeks/months* / **clear** | Set or clear due date on selected todo |
 | **todos** [*filter*] | Show todos (filters: overdue, today, pending, done, archived) |
 | **trash** | Open trash view (browse/restore/delete trashed notes) |
 | **restore** *path* | Restore a note from trash |

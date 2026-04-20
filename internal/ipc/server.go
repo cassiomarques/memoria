@@ -13,6 +13,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/cassiomarques/memoria/internal/note"
 	"github.com/cassiomarques/memoria/internal/service"
 	"github.com/cassiomarques/memoria/internal/storage"
 )
@@ -333,12 +334,13 @@ func validatePath(p string) error {
 	return nil
 }
 
-// parseDueDate parses a YYYY-MM-DD string into a *time.Time. Returns nil if empty or invalid.
+// parseDueDate parses a due date string into a *time.Time. Supports absolute
+// dates (YYYY-MM-DD) and relative durations (e.g. "2 weeks"). Returns nil if empty or invalid.
 func parseDueDate(s string) *time.Time {
 	if s == "" {
 		return nil
 	}
-	t, err := time.Parse(time.DateOnly, s)
+	t, err := note.ParseDueInput(s, time.Now())
 	if err != nil {
 		return nil
 	}
