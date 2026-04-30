@@ -267,6 +267,7 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				if !a.preview.Visible() {
 					a.preview.Toggle()
 				}
+				a.resizeComponents()
 				a.focusedPane = focusPreview
 				a.updateFocusStyles()
 			}
