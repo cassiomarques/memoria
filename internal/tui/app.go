@@ -2,6 +2,7 @@ package tui
 
 import (
 	"fmt"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"strconv"
@@ -2029,8 +2030,20 @@ Type **/** to start searching, **Enter** to lock results and browse, **Esc** to 
 	a.setMessage("Press Esc to close help", false)
 }
 
+// memoriaEditorSocket is the well-known path used to reach a neovim instance
+// launched by Memoria. External tools (e.g. the Alfred workflow) can send
+// commands to this socket to close the editor before navigating.
+const memoriaEditorSocket = "/tmp/memoria-nvim.sock"
+
+// isNvimEditor returns true if the editor binary name is nvim or vim.
+func isNvimEditor(bin string) bool {
+	base := filepath.Base(bin)
+	return base == "nvim" || base == "vim"
+}
+
 // openInEditor launches the configured editor for the given note path.
 // If lineNum > 0, passes +N to jump to that line (works with vim, nvim, nano, emacs, etc.).
+// For nvim/vim, a --listen socket is created so external tools can signal the editor.
 func (a *App) openInEditor(notePath string, lineNum int) tea.Cmd {
 	if a.svc == nil {
 		a.setMessage("No service configured", true)
@@ -2053,6 +2066,15 @@ func (a *App) openInEditor(notePath string, lineNum int) tea.Cmd {
 
 	parts := strings.Fields(editorCmd)
 	args := parts[1:]
+
+	// For nvim/vim, add a --listen socket so external tools can close the
+	// editor gracefully (e.g. Alfred workflow sending :wqa).
+	useSocket := isNvimEditor(parts[0])
+	if useSocket {
+		os.Remove(memoriaEditorSocket) // clean up stale socket
+		args = append(args, "--listen", memoriaEditorSocket)
+	}
+
 	if lineNum > 0 {
 		args = append(args, fmt.Sprintf("+%d", lineNum))
 	}
@@ -2061,6 +2083,9 @@ func (a *App) openInEditor(notePath string, lineNum int) tea.Cmd {
 
 	path := notePath
 	return tea.ExecProcess(c, func(err error) tea.Msg {
+		if useSocket {
+			os.Remove(memoriaEditorSocket)
+		}
 		return editorFinishedMsg{path: path, preEditHash: preHash, err: err}
 	})
 }
