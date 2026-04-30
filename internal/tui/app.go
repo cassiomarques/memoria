@@ -2071,7 +2071,7 @@ func (a *App) openInEditor(notePath string, lineNum int) tea.Cmd {
 	// editor gracefully (e.g. Alfred workflow sending :wqa).
 	useSocket := isNvimEditor(parts[0])
 	if useSocket {
-		os.Remove(memoriaEditorSocket) // clean up stale socket
+		_ = os.Remove(memoriaEditorSocket) // clean up stale socket
 		args = append(args, "--listen", memoriaEditorSocket)
 	}
 
@@ -2084,7 +2084,7 @@ func (a *App) openInEditor(notePath string, lineNum int) tea.Cmd {
 	path := notePath
 	return tea.ExecProcess(c, func(err error) tea.Msg {
 		if useSocket {
-			os.Remove(memoriaEditorSocket)
+			_ = os.Remove(memoriaEditorSocket)
 		}
 		return editorFinishedMsg{path: path, preEditHash: preHash, err: err}
 	})

@@ -14,6 +14,7 @@ const (
 	CmdEdit     = "edit"
 	CmdTodo     = "todo"
 	CmdNavigate = "navigate"
+	CmdRecent   = "recent"
 )
 
 // Request is sent by the CLI to the TUI over the Unix socket.

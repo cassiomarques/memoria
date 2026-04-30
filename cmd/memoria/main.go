@@ -28,8 +28,8 @@ var version = "dev"
 var knownSubcommands = map[string]bool{
 	"search": true, "list": true, "tags": true, "todos": true,
 	"cat": true, "sync": true, "new": true, "edit": true, "todo": true,
-	"navigate": true,
-	"mcp":      true,
+	"navigate": true, "recent": true,
+	"mcp": true,
 }
 
 func main() {
@@ -99,6 +99,7 @@ Run without arguments to start the interactive TUI.
 Commands:
   search <query>          Full-text search (AND across words; --exact for phrase match)
   list [folder]           List notes (optionally filtered by folder)
+  recent [limit]          List recently modified notes (default: 10)
   tags                    List all tags with note counts
   todos [filter]          List todos (filter: overdue, today, pending, done)
   cat <path>              Print note content to stdout
@@ -356,6 +357,10 @@ func buildRequest(command string, args []string) ipc.Request {
 	case "navigate":
 		if len(args) > 0 {
 			req.Args["path"] = args[0]
+		}
+	case "recent":
+		if len(args) > 0 {
+			req.Args["limit"] = args[0]
 		}
 	}
 
