@@ -264,6 +264,11 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				a.loadPreview(sel)
 				a.customPreview = false
 				a.previewedPath = sel.Path
+				if !a.preview.Visible() {
+					a.preview.Toggle()
+				}
+				a.focusedPane = focusPreview
+				a.updateFocusStyles()
 			}
 			a.setMessage("Navigated to "+msg.Path, false)
 		} else {
