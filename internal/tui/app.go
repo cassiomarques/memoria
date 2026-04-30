@@ -61,6 +61,13 @@ type refreshTickMsg struct{}
 // tags — the same way it refreshes after an internal write operation.
 type ExternalRefreshMsg struct{}
 
+// NavigateMsg is sent by the IPC server when a "navigate" command is received.
+// The TUI selects the note at the given path, expanding its parent folder and
+// showing the preview.
+type NavigateMsg struct {
+	Path string
+}
+
 // gitSyncMsg is sent when the background git sync worker completes a commit+push.
 // A nil Err means the push succeeded; non-nil means it failed (data is safe locally).
 type gitSyncMsg struct {
@@ -247,6 +254,21 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		_ = a.refreshNoteList()
 		a.refreshTags()
 		a.setMessage("Refreshed (external change)", false)
+		return a, clearMessageCmd()
+
+	case NavigateMsg:
+		// An external "navigate" command asks us to select a specific note.
+		_ = a.refreshNoteList()
+		if a.noteList.SelectByPath(msg.Path) {
+			if sel := a.noteList.SelectedItem(); sel != nil {
+				a.loadPreview(sel)
+				a.customPreview = false
+				a.previewedPath = sel.Path
+			}
+			a.setMessage("Navigated to "+msg.Path, false)
+		} else {
+			a.setMessage("Note not found: "+msg.Path, true)
+		}
 		return a, clearMessageCmd()
 
 	case gitSyncMsg:

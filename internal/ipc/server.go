@@ -21,8 +21,9 @@ import (
 // Handler dispatches IPC requests to a NoteService. It is used by both the
 // socket Server (Mode A) and the direct CLI execution path (Mode B).
 type Handler struct {
-	svc     *service.NoteService
-	onWrite atomic.Value // stores func()
+	svc        *service.NoteService
+	onWrite    atomic.Value // stores func()
+	onNavigate atomic.Value // stores func(string)
 }
 
 // NewHandler creates a handler that dispatches to the given NoteService.
@@ -39,6 +40,18 @@ func (h *Handler) SetOnWrite(fn func()) {
 func (h *Handler) callOnWrite() {
 	if fn, ok := h.onWrite.Load().(func()); ok && fn != nil {
 		fn()
+	}
+}
+
+// SetOnNavigate sets the callback invoked when a navigate command is received.
+// Safe to call from any goroutine.
+func (h *Handler) SetOnNavigate(fn func(string)) {
+	h.onNavigate.Store(fn)
+}
+
+func (h *Handler) callOnNavigate(path string) {
+	if fn, ok := h.onNavigate.Load().(func(string)); ok && fn != nil {
+		fn(path)
 	}
 }
 
@@ -169,6 +182,8 @@ func (h *Handler) Dispatch(req Request) Response {
 		return h.handleEdit(req)
 	case CmdTodo:
 		return h.handleTodo(req)
+	case CmdNavigate:
+		return h.handleNavigate(req)
 	default:
 		return ErrResponse(fmt.Sprintf("unknown command: %q", req.Command))
 	}
@@ -318,6 +333,15 @@ func (h *Handler) handleTodo(req Request) Response {
 	}
 	h.callOnWrite()
 	return OKResponse(n.Path)
+}
+
+func (h *Handler) handleNavigate(req Request) Response {
+	path := req.Args["path"]
+	if path == "" {
+		return ErrResponse("navigate requires a 'path' argument")
+	}
+	h.callOnNavigate(path)
+	return OKResponse("navigated to " + path)
 }
 
 // validatePath rejects absolute paths and directory traversal attempts.

@@ -28,7 +28,8 @@ var version = "dev"
 var knownSubcommands = map[string]bool{
 	"search": true, "list": true, "tags": true, "todos": true,
 	"cat": true, "sync": true, "new": true, "edit": true, "todo": true,
-	"mcp": true,
+	"navigate": true,
+	"mcp":      true,
 }
 
 func main() {
@@ -222,6 +223,9 @@ func runTUI(homeDir string) error {
 		ipcServer.Handler().SetOnWrite(func() {
 			p.Send(tui.ExternalRefreshMsg{})
 		})
+		ipcServer.Handler().SetOnNavigate(func(path string) {
+			p.Send(tui.NavigateMsg{Path: path})
+		})
 	}
 
 	if _, err := p.Run(); err != nil {
@@ -348,6 +352,10 @@ func buildRequest(command string, args []string) ipc.Request {
 		}
 		if len(titleParts) > 0 {
 			req.Args["title"] = strings.Join(titleParts, " ")
+		}
+	case "navigate":
+		if len(args) > 0 {
+			req.Args["path"] = args[0]
 		}
 	}
 
