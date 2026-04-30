@@ -184,6 +184,8 @@ func (h *Handler) Dispatch(req Request) Response {
 		return h.handleTodo(req)
 	case CmdNavigate:
 		return h.handleNavigate(req)
+	case CmdRecent:
+		return h.handleRecent(req)
 	default:
 		return ErrResponse(fmt.Sprintf("unknown command: %q", req.Command))
 	}
@@ -342,6 +344,18 @@ func (h *Handler) handleNavigate(req Request) Response {
 	}
 	h.callOnNavigate(path)
 	return OKResponse("navigated to " + path)
+}
+
+func (h *Handler) handleRecent(req Request) Response {
+	limit := 10
+	if l, err := strconv.Atoi(req.Args["limit"]); err == nil && l > 0 && l <= 100 {
+		limit = l
+	}
+	results, err := h.svc.ListRecent(limit)
+	if err != nil {
+		return ErrResponse(err.Error())
+	}
+	return OKResponse(results)
 }
 
 // validatePath rejects absolute paths and directory traversal attempts.
