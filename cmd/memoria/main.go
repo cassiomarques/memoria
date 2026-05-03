@@ -28,7 +28,7 @@ var version = "dev"
 var knownSubcommands = map[string]bool{
 	"search": true, "list": true, "tags": true, "todos": true,
 	"cat": true, "sync": true, "new": true, "edit": true, "todo": true,
-	"navigate": true, "recent": true,
+	"navigate": true, "recent": true, "daily": true,
 	"mcp": true,
 }
 
@@ -100,6 +100,7 @@ Commands:
   search <query>          Full-text search (AND across words; --exact for phrase match)
   list [folder]           List notes (optionally filtered by folder)
   recent [limit]          List recently modified notes (default: 10)
+  daily <text>            Append a bullet item to today's section in the daily file
   tags                    List all tags with note counts
   todos [filter]          List todos (filter: overdue, today, pending, done)
   cat <path>              Print note content to stdout
@@ -199,6 +200,7 @@ func runTUI(homeDir string) error {
 	// Start IPC server so CLI commands can talk to this running instance
 	sockPath := ipc.SocketPath(config.DefaultConfigDir())
 	handler := ipc.NewHandler(svc)
+	handler.SetDailyFile(cfg.DailyFile)
 	ipcServer, err := ipc.NewServer(sockPath, handler)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Warning: could not start IPC server: %v\n", err)
@@ -362,6 +364,10 @@ func buildRequest(command string, args []string) ipc.Request {
 		if len(args) > 0 {
 			req.Args["limit"] = args[0]
 		}
+	case "daily":
+		if len(args) > 0 {
+			req.Args["text"] = strings.Join(args, " ")
+		}
 	}
 
 	return req
@@ -499,6 +505,7 @@ func runDirect(homeDir string, jsonOutput bool, req ipc.Request) error {
 	defer svc.Close()
 
 	handler := ipc.NewHandler(svc)
+	handler.SetDailyFile(cfg.DailyFile)
 	resp := handler.Dispatch(req)
 	return printResponse(&resp, jsonOutput)
 }

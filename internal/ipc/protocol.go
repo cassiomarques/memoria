@@ -4,17 +4,18 @@ import "encoding/json"
 
 // Command constants for CLI → TUI communication.
 const (
-	CmdSearch   = "search"
-	CmdList     = "list"
-	CmdTags     = "tags"
-	CmdTodos    = "todos"
-	CmdCat      = "cat"
-	CmdSync     = "sync"
-	CmdNew      = "new"
-	CmdEdit     = "edit"
-	CmdTodo     = "todo"
-	CmdNavigate = "navigate"
-	CmdRecent   = "recent"
+	CmdSearch      = "search"
+	CmdList        = "list"
+	CmdTags        = "tags"
+	CmdTodos       = "todos"
+	CmdCat         = "cat"
+	CmdSync        = "sync"
+	CmdNew         = "new"
+	CmdEdit        = "edit"
+	CmdTodo        = "todo"
+	CmdNavigate    = "navigate"
+	CmdRecent      = "recent"
+	CmdAppendDaily = "daily"
 )
 
 // Request is sent by the CLI to the TUI over the Unix socket.

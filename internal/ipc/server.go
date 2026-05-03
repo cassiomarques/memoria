@@ -22,13 +22,21 @@ import (
 // socket Server (Mode A) and the direct CLI execution path (Mode B).
 type Handler struct {
 	svc        *service.NoteService
+	dailyFile  string       // relative path to daily log file
 	onWrite    atomic.Value // stores func()
 	onNavigate atomic.Value // stores func(string)
 }
 
 // NewHandler creates a handler that dispatches to the given NoteService.
 func NewHandler(svc *service.NoteService) *Handler {
-	return &Handler{svc: svc}
+	return &Handler{svc: svc, dailyFile: "daily.md"}
+}
+
+// SetDailyFile configures the relative path to the daily log file.
+func (h *Handler) SetDailyFile(path string) {
+	if path != "" {
+		h.dailyFile = path
+	}
 }
 
 // SetOnWrite sets the callback invoked after a write command completes.
@@ -186,6 +194,8 @@ func (h *Handler) Dispatch(req Request) Response {
 		return h.handleNavigate(req)
 	case CmdRecent:
 		return h.handleRecent(req)
+	case CmdAppendDaily:
+		return h.handleAppendDaily(req)
 	default:
 		return ErrResponse(fmt.Sprintf("unknown command: %q", req.Command))
 	}
@@ -356,6 +366,18 @@ func (h *Handler) handleRecent(req Request) Response {
 		return ErrResponse(err.Error())
 	}
 	return OKResponse(results)
+}
+
+func (h *Handler) handleAppendDaily(req Request) Response {
+	text := req.Args["text"]
+	if text == "" {
+		return ErrResponse("daily requires a 'text' argument")
+	}
+	if err := h.svc.AppendDaily(h.dailyFile, text); err != nil {
+		return ErrResponse(err.Error())
+	}
+	h.callOnWrite()
+	return OKResponse("appended to daily")
 }
 
 // validatePath rejects absolute paths and directory traversal attempts.

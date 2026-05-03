@@ -1155,3 +1155,113 @@ func folderFromPath(path string) string {
 	}
 	return dir
 }
+
+// AppendDaily appends a bullet item to today's section in the daily file.
+// If today's section doesn't exist, it creates one at the top (after frontmatter/title).
+// The dailyPath is relative to the notes directory.
+func (s *NoteService) AppendDaily(dailyPath, text string) error {
+	if text == "" {
+		return fmt.Errorf("text is required")
+	}
+
+	dailyPath = ensureMD(dailyPath)
+	absPath := filepath.Join(s.files.Root(), dailyPath)
+	today := time.Now().Format("2006-01-02")
+	header := "## " + today
+	bullet := "- " + text
+
+	content, err := os.ReadFile(absPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			// Create the file with frontmatter and first entry.
+			now := time.Now().Format(time.RFC3339)
+			newContent := fmt.Sprintf("---\ncreated: %q\nmodified: %q\ntags:\n    - daily\n---\n# Daily\n\n%s\n\n%s\n",
+				now, now, header, bullet)
+			if writeErr := os.WriteFile(absPath, []byte(newContent), 0644); writeErr != nil {
+				return fmt.Errorf("creating daily file: %w", writeErr)
+			}
+			s.requestSync("append daily " + dailyPath)
+			return nil
+		}
+		return fmt.Errorf("reading daily file: %w", err)
+	}
+
+	lines := strings.Split(string(content), "\n")
+	var result []string
+	inserted := false
+
+	for i, line := range lines {
+		result = append(result, line)
+		if !inserted && strings.TrimSpace(line) == header {
+			// Found today's section. Find the end of the bullet list and append there.
+			// Skip blank lines immediately after the header, then find the last bullet.
+			j := i + 1
+			// Skip blank lines after header
+			for j < len(lines) && strings.TrimSpace(lines[j]) == "" {
+				result = append(result, lines[j])
+				j++
+			}
+			// Skip existing bullets and any non-header content
+			for j < len(lines) && strings.TrimSpace(lines[j]) != "" && !strings.HasPrefix(lines[j], "## ") {
+				result = append(result, lines[j])
+				j++
+			}
+			// Insert new bullet
+			result = append(result, bullet)
+			// Append remaining lines
+			result = append(result, lines[j:]...)
+			inserted = true
+			break
+		}
+	}
+
+	if !inserted {
+		// Today's section doesn't exist. Insert after the title line (# Daily) or
+		// after frontmatter if no title found.
+		var insertIdx int
+		inFrontmatter := false
+		foundTitle := false
+		for i, line := range lines {
+			if i == 0 && strings.TrimSpace(line) == "---" {
+				inFrontmatter = true
+				continue
+			}
+			if inFrontmatter {
+				if strings.TrimSpace(line) == "---" {
+					inFrontmatter = false
+					insertIdx = i + 1
+				}
+				continue
+			}
+			if strings.HasPrefix(line, "# ") && !strings.HasPrefix(line, "## ") {
+				foundTitle = true
+				insertIdx = i + 1
+				continue
+			}
+			if foundTitle {
+				// Skip blank lines after title
+				if strings.TrimSpace(line) == "" {
+					insertIdx = i + 1
+					continue
+				}
+				break
+			}
+		}
+
+		// Insert new section at insertIdx
+		section := []string{header, "", bullet, ""}
+		result = make([]string, 0, len(lines)+4)
+		result = append(result, lines[:insertIdx]...)
+		result = append(result, section...)
+		result = append(result, lines[insertIdx:]...)
+	}
+
+	// Update the modified timestamp in frontmatter
+	output := strings.Join(result, "\n")
+	if err := os.WriteFile(absPath, []byte(output), 0644); err != nil {
+		return fmt.Errorf("writing daily file: %w", err)
+	}
+
+	s.requestSync("append daily " + dailyPath)
+	return nil
+}

@@ -23,6 +23,7 @@ type Config struct {
 	ShowTimestamps    *bool   `yaml:"show_timestamps,omitempty"`
 	DefaultTodoFolder *string `yaml:"default_todo_folder,omitempty"`
 	TodosEnabled      *bool   `yaml:"todos_enabled,omitempty"`
+	DailyFile         string  `yaml:"daily_file,omitempty"`
 }
 
 // DefaultConfig returns a Config with sensible defaults.

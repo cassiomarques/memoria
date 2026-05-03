@@ -2065,3 +2065,100 @@ func TestArchive_NonTodoFails(t *testing.T) {
 		t.Fatal("expected error archiving a non-todo")
 	}
 }
+
+func TestAppendDaily_CreatesFile(t *testing.T) {
+	svc := setupService(t)
+
+	err := svc.AppendDaily("daily.md", "Hello world")
+	if err != nil {
+		t.Fatalf("AppendDaily: %v", err)
+	}
+
+	content, err := os.ReadFile(filepath.Join(svc.files.Root(), "daily.md"))
+	if err != nil {
+		t.Fatalf("reading daily file: %v", err)
+	}
+
+	today := time.Now().Format("2006-01-02")
+	if !strings.Contains(string(content), "## "+today) {
+		t.Errorf("expected today's header, got:\n%s", content)
+	}
+	if !strings.Contains(string(content), "- Hello world") {
+		t.Errorf("expected bullet, got:\n%s", content)
+	}
+}
+
+func TestAppendDaily_AppendsToExistingSection(t *testing.T) {
+	svc := setupService(t)
+
+	today := time.Now().Format("2006-01-02")
+	initial := "---\ncreated: \"2026-01-01\"\nmodified: \"2026-01-01\"\n---\n# Daily\n\n## " + today + "\n\n- Existing item\n\n## 2026-04-01\n\n- Old item\n"
+	dailyPath := filepath.Join(svc.files.Root(), "daily.md")
+	if err := os.WriteFile(dailyPath, []byte(initial), 0644); err != nil {
+		t.Fatalf("writing initial file: %v", err)
+	}
+
+	err := svc.AppendDaily("daily.md", "New item")
+	if err != nil {
+		t.Fatalf("AppendDaily: %v", err)
+	}
+
+	content, err := os.ReadFile(dailyPath)
+	if err != nil {
+		t.Fatalf("reading daily file: %v", err)
+	}
+
+	s := string(content)
+	if !strings.Contains(s, "- Existing item") {
+		t.Error("lost existing item")
+	}
+	if !strings.Contains(s, "- New item") {
+		t.Error("new item not appended")
+	}
+	// New item should come after existing
+	existIdx := strings.Index(s, "- Existing item")
+	newIdx := strings.Index(s, "- New item")
+	if newIdx < existIdx {
+		t.Error("new item should appear after existing item")
+	}
+	// Old section should still be there
+	if !strings.Contains(s, "## 2026-04-01") {
+		t.Error("lost old section")
+	}
+}
+
+func TestAppendDaily_CreatesTodaySection(t *testing.T) {
+	svc := setupService(t)
+
+	// File exists but no section for today
+	initial := "---\ncreated: \"2026-01-01\"\nmodified: \"2026-01-01\"\n---\n# Daily\n\n## 2026-04-01\n\n- Old item\n"
+	dailyPath := filepath.Join(svc.files.Root(), "daily.md")
+	if err := os.WriteFile(dailyPath, []byte(initial), 0644); err != nil {
+		t.Fatalf("writing initial file: %v", err)
+	}
+
+	err := svc.AppendDaily("daily.md", "Today's item")
+	if err != nil {
+		t.Fatalf("AppendDaily: %v", err)
+	}
+
+	content, err := os.ReadFile(dailyPath)
+	if err != nil {
+		t.Fatalf("reading daily file: %v", err)
+	}
+
+	today := time.Now().Format("2006-01-02")
+	s := string(content)
+	if !strings.Contains(s, "## "+today) {
+		t.Errorf("expected today's header in:\n%s", s)
+	}
+	if !strings.Contains(s, "- Today's item") {
+		t.Errorf("expected today's item in:\n%s", s)
+	}
+	// Today's section should be before old section (newest first)
+	todayIdx := strings.Index(s, "## "+today)
+	oldIdx := strings.Index(s, "## 2026-04-01")
+	if todayIdx > oldIdx {
+		t.Error("today's section should be before older sections")
+	}
+}
