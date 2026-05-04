@@ -303,6 +303,39 @@ memoria todo "Review PR" --folder "Work/tasks" --tags review,urgent
 memoria todo "Submit report" --due 2026-04-15
 ```
 
+#### `memoria recent [limit]`
+
+List the most recently modified notes, sorted by modification time (newest first). Default limit is 10.
+
+```bash
+memoria recent              # 10 most recent notes
+memoria recent 5            # 5 most recent
+memoria recent --json       # JSON output with full metadata
+```
+
+#### `memoria daily <text>`
+
+Append a bullet item to today's section in the daily log file. Each day gets a `## YYYY-MM-DD` header; items are added as `- <text>` under that header. If today's section doesn't exist, it's created at the top. If the file doesn't exist, it's created with frontmatter.
+
+```bash
+memoria daily "Reviewed PRs for the team"
+memoria daily "Shipped the authentication fix"
+```
+
+Configure the daily file path in `~/.memoria/config.yaml` (defaults to `daily.md`):
+
+```yaml
+daily_file: daily.md
+```
+
+#### `memoria navigate <path>`
+
+Select a note in the running TUI and open its preview. Used by external tools (e.g. Alfred workflow) to jump to a specific note.
+
+```bash
+memoria navigate Projects/roadmap.md
+```
+
 ### Global Flags
 
 | Flag | Description |
@@ -476,6 +509,9 @@ default_todo_folder: "TODO"
 
 # Enable/disable todo features (default: true)
 todos_enabled: true
+
+# Path to the daily log file, relative to notes_dir (default: "daily.md")
+daily_file: daily.md
 ```
 
 ### Editor resolution
