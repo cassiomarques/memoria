@@ -1294,10 +1294,10 @@ func (s *NoteService) AppendCheatsheet(notePath, section string, columns []strin
 	lines := strings.Split(string(content), "\n")
 	sectionHeader := "## " + section
 
-	// Find the section
+	// Find the section (case-insensitive)
 	sectionIdx := -1
 	for i, line := range lines {
-		if strings.TrimSpace(line) == sectionHeader {
+		if strings.EqualFold(strings.TrimSpace(line), sectionHeader) {
 			sectionIdx = i
 			break
 		}
