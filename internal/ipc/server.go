@@ -196,6 +196,8 @@ func (h *Handler) Dispatch(req Request) Response {
 		return h.handleRecent(req)
 	case CmdAppendDaily:
 		return h.handleAppendDaily(req)
+	case CmdCheatsheets:
+		return h.handleCheatsheets(req)
 	default:
 		return ErrResponse(fmt.Sprintf("unknown command: %q", req.Command))
 	}
@@ -378,6 +380,14 @@ func (h *Handler) handleAppendDaily(req Request) Response {
 	}
 	h.callOnWrite()
 	return OKResponse("appended to daily")
+}
+
+func (h *Handler) handleCheatsheets(_ Request) Response {
+	results, err := h.svc.ListCheatsheets()
+	if err != nil {
+		return ErrResponse(err.Error())
+	}
+	return OKResponse(results)
 }
 
 // validatePath rejects absolute paths and directory traversal attempts.

@@ -9,18 +9,19 @@ import (
 
 // Note represents a markdown note with metadata.
 type Note struct {
-	Path      string   // relative path from notes root (e.g., "work/meeting.md")
-	Title     string   // derived from filename without .md extension
-	Content   string   // the markdown content (without frontmatter)
-	Tags      []string // from frontmatter
-	Folder    string   // directory portion of path (e.g., "work")
-	Created   time.Time
-	Modified  time.Time
-	Todo      bool       // true if this note is a todo item
-	Done      bool       // true if this todo is completed
-	Due       *time.Time // optional due date for todos
-	Completed *time.Time // when the todo was marked done
-	Archived  bool       // true if archived (hidden from main views)
+	Path       string   // relative path from notes root (e.g., "work/meeting.md")
+	Title      string   // derived from filename without .md extension
+	Content    string   // the markdown content (without frontmatter)
+	Tags       []string // from frontmatter
+	Folder     string   // directory portion of path (e.g., "work")
+	Created    time.Time
+	Modified   time.Time
+	Todo       bool       // true if this note is a todo item
+	Done       bool       // true if this todo is completed
+	Due        *time.Time // optional due date for todos
+	Completed  *time.Time // when the todo was marked done
+	Archived   bool       // true if archived (hidden from main views)
+	Cheatsheet bool       // true if this note is a cheatsheet
 }
 
 // NewNote creates a new note, auto-setting Title from path, Folder from path,
@@ -78,12 +79,13 @@ func (n *Note) HasTag(tag string) bool {
 // FullContent returns the frontmatter + content combined as a single string.
 func (n *Note) FullContent() string {
 	fm := Frontmatter{
-		Tags:     n.Tags,
-		Created:  n.Created,
-		Modified: n.Modified,
-		Todo:     n.Todo,
-		Done:     n.Done,
-		Archived: n.Archived,
+		Tags:       n.Tags,
+		Created:    n.Created,
+		Modified:   n.Modified,
+		Todo:       n.Todo,
+		Done:       n.Done,
+		Archived:   n.Archived,
+		Cheatsheet: n.Cheatsheet,
 	}
 	if n.Due != nil {
 		d := DateOnly(*n.Due)

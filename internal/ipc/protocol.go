@@ -16,6 +16,7 @@ const (
 	CmdNavigate    = "navigate"
 	CmdRecent      = "recent"
 	CmdAppendDaily = "daily"
+	CmdCheatsheets = "cheatsheets"
 )
 
 // Request is sent by the CLI to the TUI over the Unix socket.

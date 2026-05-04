@@ -14,17 +14,18 @@ var ErrNoteNotFound = errors.New("note not found")
 
 // NoteMeta holds note metadata as stored in the database.
 type NoteMeta struct {
-	Path      string
-	Title     string
-	Folder    string
-	Tags      []string
-	Created   time.Time
-	Modified  time.Time
-	Todo      bool
-	Done      bool
-	Due       *time.Time
-	Completed *time.Time
-	Archived  bool
+	Path       string
+	Title      string
+	Folder     string
+	Tags       []string
+	Created    time.Time
+	Modified   time.Time
+	Todo       bool
+	Done       bool
+	Due        *time.Time
+	Completed  *time.Time
+	Archived   bool
+	Cheatsheet bool
 }
 
 // TagInfo holds a tag name and how many notes use it.
@@ -117,6 +118,7 @@ func migrate(db *sql.DB) error {
 		{"due", `ALTER TABLE notes ADD COLUMN due DATETIME`},
 		{"completed", `ALTER TABLE notes ADD COLUMN completed DATETIME`},
 		{"archived", `ALTER TABLE notes ADD COLUMN archived BOOLEAN NOT NULL DEFAULT 0`},
+		{"cheatsheet", `ALTER TABLE notes ADD COLUMN cheatsheet BOOLEAN NOT NULL DEFAULT 0`},
 	}
 	for _, col := range todoColumns {
 		if !hasColumn(db, "notes", col.name) {
@@ -167,19 +169,20 @@ func (m *MetaStore) UpsertNote(n *note.Note) error {
 	defer tx.Rollback()
 
 	_, err = tx.Exec(`
-		INSERT INTO notes (path, title, folder, created, modified, todo, done, due, completed, archived)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		INSERT INTO notes (path, title, folder, created, modified, todo, done, due, completed, archived, cheatsheet)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(path) DO UPDATE SET
-			title     = excluded.title,
-			folder    = excluded.folder,
-			created   = excluded.created,
-			modified  = excluded.modified,
-			todo      = excluded.todo,
-			done      = excluded.done,
-			due       = excluded.due,
-			completed = excluded.completed,
-			archived  = excluded.archived`,
-		n.Path, n.Title, n.Folder, n.Created, n.Modified, n.Todo, n.Done, n.Due, n.Completed, n.Archived,
+			title      = excluded.title,
+			folder     = excluded.folder,
+			created    = excluded.created,
+			modified   = excluded.modified,
+			todo       = excluded.todo,
+			done       = excluded.done,
+			due        = excluded.due,
+			completed  = excluded.completed,
+			archived   = excluded.archived,
+			cheatsheet = excluded.cheatsheet`,
+		n.Path, n.Title, n.Folder, n.Created, n.Modified, n.Todo, n.Done, n.Due, n.Completed, n.Archived, n.Cheatsheet,
 	)
 	if err != nil {
 		return err
@@ -234,8 +237,8 @@ func (m *MetaStore) MoveNote(oldPath, newPath string, newFolder string) error {
 func (m *MetaStore) GetNote(path string) (*NoteMeta, error) {
 	nm := &NoteMeta{}
 	err := m.db.QueryRow(
-		`SELECT path, title, folder, created, modified, todo, done, due, completed, archived FROM notes WHERE path = ?`, path,
-	).Scan(&nm.Path, &nm.Title, &nm.Folder, &nm.Created, &nm.Modified, &nm.Todo, &nm.Done, &nm.Due, &nm.Completed, &nm.Archived)
+		`SELECT path, title, folder, created, modified, todo, done, due, completed, archived, cheatsheet FROM notes WHERE path = ?`, path,
+	).Scan(&nm.Path, &nm.Title, &nm.Folder, &nm.Created, &nm.Modified, &nm.Todo, &nm.Done, &nm.Due, &nm.Completed, &nm.Archived, &nm.Cheatsheet)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrNoteNotFound
 	}
@@ -254,7 +257,7 @@ func (m *MetaStore) GetNote(path string) (*NoteMeta, error) {
 // ListByFolder returns all notes in the given folder, sorted by title.
 func (m *MetaStore) ListByFolder(folder string) ([]*NoteMeta, error) {
 	rows, err := m.db.Query(
-		`SELECT path, title, folder, created, modified, todo, done, due, completed, archived FROM notes WHERE folder = ? ORDER BY title`, folder,
+		`SELECT path, title, folder, created, modified, todo, done, due, completed, archived, cheatsheet FROM notes WHERE folder = ? ORDER BY title`, folder,
 	)
 	if err != nil {
 		return nil, err
@@ -266,7 +269,7 @@ func (m *MetaStore) ListByFolder(folder string) ([]*NoteMeta, error) {
 // ListByTag returns all notes that have the given tag, sorted by title.
 func (m *MetaStore) ListByTag(tag string) ([]*NoteMeta, error) {
 	rows, err := m.db.Query(
-		`SELECT n.path, n.title, n.folder, n.created, n.modified, n.todo, n.done, n.due, n.completed, n.archived
+		`SELECT n.path, n.title, n.folder, n.created, n.modified, n.todo, n.done, n.due, n.completed, n.archived, n.cheatsheet
 		 FROM notes n
 		 JOIN tags t ON n.path = t.note_path
 		 WHERE t.tag = ?
@@ -303,7 +306,7 @@ func (m *MetaStore) ListAllTags() ([]TagInfo, error) {
 // ListAll returns all notes sorted by path.
 func (m *MetaStore) ListAll() ([]*NoteMeta, error) {
 	rows, err := m.db.Query(
-		`SELECT path, title, folder, created, modified, todo, done, due, completed, archived FROM notes ORDER BY path`,
+		`SELECT path, title, folder, created, modified, todo, done, due, completed, archived, cheatsheet FROM notes ORDER BY path`,
 	)
 	if err != nil {
 		return nil, err
@@ -378,7 +381,7 @@ func (m *MetaStore) ListPinned() ([]string, error) {
 // ListRecent returns notes ordered by most recently modified.
 func (m *MetaStore) ListRecent(limit int) ([]*NoteMeta, error) {
 	rows, err := m.db.Query(
-		`SELECT path, title, folder, created, modified, todo, done, due, completed, archived FROM notes ORDER BY modified DESC LIMIT ?`,
+		`SELECT path, title, folder, created, modified, todo, done, due, completed, archived, cheatsheet FROM notes ORDER BY modified DESC LIMIT ?`,
 		limit,
 	)
 	if err != nil {
@@ -391,7 +394,7 @@ func (m *MetaStore) scanNotesWithTags(rows *sql.Rows) ([]*NoteMeta, error) {
 	var notes []*NoteMeta
 	for rows.Next() {
 		nm := &NoteMeta{}
-		if err := rows.Scan(&nm.Path, &nm.Title, &nm.Folder, &nm.Created, &nm.Modified, &nm.Todo, &nm.Done, &nm.Due, &nm.Completed, &nm.Archived); err != nil {
+		if err := rows.Scan(&nm.Path, &nm.Title, &nm.Folder, &nm.Created, &nm.Modified, &nm.Todo, &nm.Done, &nm.Due, &nm.Completed, &nm.Archived, &nm.Cheatsheet); err != nil {
 			return nil, err
 		}
 		notes = append(notes, nm)
@@ -413,7 +416,7 @@ func (m *MetaStore) scanNotesWithTags(rows *sql.Rows) ([]*NoteMeta, error) {
 // ListTodos returns all notes marked as todos, ordered by due date (nulls last), then title.
 func (m *MetaStore) ListTodos() ([]*NoteMeta, error) {
 	rows, err := m.db.Query(
-		`SELECT path, title, folder, created, modified, todo, done, due, completed, archived
+		`SELECT path, title, folder, created, modified, todo, done, due, completed, archived, cheatsheet
 		 FROM notes
 		 WHERE todo = 1 AND archived = 0
 		 ORDER BY done ASC, due IS NULL, due ASC, title`,
@@ -444,10 +447,25 @@ func (m *MetaStore) SetTodoDone(path string, done bool) error {
 // ListArchivedTodos returns archived todo notes, ordered by completed date (newest first).
 func (m *MetaStore) ListArchivedTodos() ([]*NoteMeta, error) {
 	rows, err := m.db.Query(
-		`SELECT path, title, folder, created, modified, todo, done, due, completed, archived
+		`SELECT path, title, folder, created, modified, todo, done, due, completed, archived, cheatsheet
 		 FROM notes
 		 WHERE todo = 1 AND archived = 1
 		 ORDER BY completed DESC, title`,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	return m.scanNotesWithTags(rows)
+}
+
+// ListCheatsheets returns notes marked as cheatsheets, ordered by title.
+func (m *MetaStore) ListCheatsheets() ([]*NoteMeta, error) {
+	rows, err := m.db.Query(
+		`SELECT path, title, folder, created, modified, todo, done, due, completed, archived, cheatsheet
+		 FROM notes
+		 WHERE cheatsheet = 1
+		 ORDER BY title`,
 	)
 	if err != nil {
 		return nil, err

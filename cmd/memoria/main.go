@@ -28,7 +28,7 @@ var version = "dev"
 var knownSubcommands = map[string]bool{
 	"search": true, "list": true, "tags": true, "todos": true,
 	"cat": true, "sync": true, "new": true, "edit": true, "todo": true,
-	"navigate": true, "recent": true, "daily": true,
+	"navigate": true, "recent": true, "daily": true, "cheatsheets": true,
 	"mcp": true,
 }
 
@@ -108,6 +108,7 @@ Commands:
   new <path> [--tags t]   Create a new note
   edit <path>             Update an existing note (content from stdin)
   todo <title> [opts]     Create a new todo (--folder F, --tags t1,t2, --due YYYY-MM-DD)
+  cheatsheets             List notes marked as cheatsheets
   mcp                     Start the MCP server (stdio transport)
   help                    Show this help
 
@@ -368,6 +369,8 @@ func buildRequest(command string, args []string) ipc.Request {
 		if len(args) > 0 {
 			req.Args["text"] = strings.Join(args, " ")
 		}
+	case "cheatsheets":
+		// no additional args needed
 	}
 
 	return req

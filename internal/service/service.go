@@ -660,6 +660,11 @@ func (s *NoteService) ListRecent(limit int) ([]*storage.NoteMeta, error) {
 	return s.meta.ListRecent(limit)
 }
 
+// ListCheatsheets returns notes marked as cheatsheets.
+func (s *NoteService) ListCheatsheets() ([]*storage.NoteMeta, error) {
+	return s.meta.ListCheatsheets()
+}
+
 // Sync pulls from git (if configured), then reloads all notes from disk
 // and re-indexes them in metadata and search.
 func (s *NoteService) Sync() error {

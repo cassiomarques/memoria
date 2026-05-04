@@ -10,14 +10,15 @@ import (
 
 // Frontmatter represents the YAML frontmatter of a note.
 type Frontmatter struct {
-	Tags      []string  `yaml:"tags,omitempty"`
-	Created   time.Time `yaml:"created"`
-	Modified  time.Time `yaml:"modified"`
-	Todo      bool      `yaml:"todo,omitempty"`
-	Done      bool      `yaml:"done,omitempty"`
-	Due       *DateOnly `yaml:"due,omitempty"`
-	Completed *DateOnly `yaml:"completed,omitempty"`
-	Archived  bool      `yaml:"archived,omitempty"`
+	Tags       []string  `yaml:"tags,omitempty"`
+	Created    time.Time `yaml:"created"`
+	Modified   time.Time `yaml:"modified"`
+	Todo       bool      `yaml:"todo,omitempty"`
+	Done       bool      `yaml:"done,omitempty"`
+	Due        *DateOnly `yaml:"due,omitempty"`
+	Completed  *DateOnly `yaml:"completed,omitempty"`
+	Archived   bool      `yaml:"archived,omitempty"`
+	Cheatsheet bool      `yaml:"cheatsheet,omitempty"`
 }
 
 // DateOnly is a date-only time value that serializes as YYYY-MM-DD in YAML.
@@ -162,6 +163,7 @@ func ParseNote(path string, raw string) (*Note, error) {
 			n.Completed = &t
 		}
 		n.Archived = fm.Archived
+		n.Cheatsheet = fm.Cheatsheet
 	}
 
 	return n, nil
