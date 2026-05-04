@@ -2162,3 +2162,142 @@ func TestAppendDaily_CreatesTodaySection(t *testing.T) {
 		t.Error("today's section should be before older sections")
 	}
 }
+
+func TestAppendDaily_EmptyTextError(t *testing.T) {
+	svc := setupService(t)
+
+	err := svc.AppendDaily("daily.md", "")
+	if err == nil {
+		t.Fatal("expected error for empty text")
+	}
+	if !strings.Contains(err.Error(), "text is required") {
+		t.Errorf("unexpected error: %v", err)
+	}
+}
+
+func TestAppendDaily_MultipleAppends(t *testing.T) {
+	svc := setupService(t)
+
+	for _, text := range []string{"First item", "Second item", "Third item"} {
+		if err := svc.AppendDaily("daily.md", text); err != nil {
+			t.Fatalf("AppendDaily(%q): %v", text, err)
+		}
+	}
+
+	content, err := os.ReadFile(filepath.Join(svc.files.Root(), "daily.md"))
+	if err != nil {
+		t.Fatalf("reading daily file: %v", err)
+	}
+
+	s := string(content)
+	// All three items should be present
+	for _, text := range []string{"- First item", "- Second item", "- Third item"} {
+		if !strings.Contains(s, text) {
+			t.Errorf("missing %q in:\n%s", text, s)
+		}
+	}
+
+	// Items should be in order
+	firstIdx := strings.Index(s, "- First item")
+	secondIdx := strings.Index(s, "- Second item")
+	thirdIdx := strings.Index(s, "- Third item")
+	if firstIdx > secondIdx || secondIdx > thirdIdx {
+		t.Errorf("items out of order: first=%d second=%d third=%d", firstIdx, secondIdx, thirdIdx)
+	}
+
+	// Should only have one header for today
+	today := time.Now().Format("2006-01-02")
+	header := "## " + today
+	if strings.Count(s, header) != 1 {
+		t.Errorf("expected exactly one today header, got %d in:\n%s", strings.Count(s, header), s)
+	}
+}
+
+func TestAppendDaily_InSubfolder(t *testing.T) {
+	svc := setupService(t)
+
+	// Create the subfolder
+	subdir := filepath.Join(svc.files.Root(), "journal")
+	if err := os.MkdirAll(subdir, 0755); err != nil {
+		t.Fatalf("creating subfolder: %v", err)
+	}
+
+	err := svc.AppendDaily("journal/daily.md", "Subfolder item")
+	if err != nil {
+		t.Fatalf("AppendDaily: %v", err)
+	}
+
+	content, err := os.ReadFile(filepath.Join(subdir, "daily.md"))
+	if err != nil {
+		t.Fatalf("reading daily file: %v", err)
+	}
+
+	s := string(content)
+	if !strings.Contains(s, "- Subfolder item") {
+		t.Errorf("expected item in:\n%s", s)
+	}
+}
+
+func TestAppendDaily_PreservesSubsections(t *testing.T) {
+	svc := setupService(t)
+
+	// Mimic real daily.md structure with ### subsections under a day
+	today := time.Now().Format("2006-01-02")
+	initial := "---\ncreated: \"2026-01-01\"\nmodified: \"2026-01-01\"\n---\n# Daily\n\n## " + today + "\n\n- Existing item\n\n### Random thoughts\n\n- Some thought\n\n## 2026-04-01\n\n- Old item\n"
+	dailyPath := filepath.Join(svc.files.Root(), "daily.md")
+	if err := os.WriteFile(dailyPath, []byte(initial), 0644); err != nil {
+		t.Fatalf("writing initial file: %v", err)
+	}
+
+	err := svc.AppendDaily("daily.md", "New item")
+	if err != nil {
+		t.Fatalf("AppendDaily: %v", err)
+	}
+
+	content, err := os.ReadFile(dailyPath)
+	if err != nil {
+		t.Fatalf("reading daily file: %v", err)
+	}
+
+	s := string(content)
+	// New item should be present
+	if !strings.Contains(s, "- New item") {
+		t.Errorf("missing new item in:\n%s", s)
+	}
+	// Subsection should be preserved
+	if !strings.Contains(s, "### Random thoughts") {
+		t.Errorf("lost subsection in:\n%s", s)
+	}
+	if !strings.Contains(s, "- Some thought") {
+		t.Errorf("lost subsection content in:\n%s", s)
+	}
+	// New item should appear before the subsection
+	newIdx := strings.Index(s, "- New item")
+	subsectionIdx := strings.Index(s, "### Random thoughts")
+	if newIdx > subsectionIdx {
+		t.Errorf("new item should be before subsection, but new=%d subsection=%d in:\n%s", newIdx, subsectionIdx, s)
+	}
+	// Old section should be preserved
+	if !strings.Contains(s, "## 2026-04-01") {
+		t.Errorf("lost old section in:\n%s", s)
+	}
+}
+
+func TestAppendDaily_WithoutExtension(t *testing.T) {
+	svc := setupService(t)
+
+	// Should auto-add .md extension
+	err := svc.AppendDaily("daily", "No extension test")
+	if err != nil {
+		t.Fatalf("AppendDaily: %v", err)
+	}
+
+	content, err := os.ReadFile(filepath.Join(svc.files.Root(), "daily.md"))
+	if err != nil {
+		t.Fatalf("reading daily file: %v", err)
+	}
+
+	if !strings.Contains(string(content), "- No extension test") {
+		t.Errorf("expected item in:\n%s", content)
+	}
+}
