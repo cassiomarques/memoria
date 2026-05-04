@@ -2301,3 +2301,122 @@ func TestAppendDaily_WithoutExtension(t *testing.T) {
 		t.Errorf("expected item in:\n%s", content)
 	}
 }
+
+func TestAppendCheatsheet_ExistingTable(t *testing.T) {
+	svc := setupService(t)
+
+	initial := `---
+cheatsheet: true
+created: "2026-01-01T00:00:00Z"
+modified: "2026-01-01T00:00:00Z"
+---
+# Git
+
+## Basics
+
+| Command | Description |
+|---------|-------------|
+| ` + "`git init`" + ` | Initialize a repo |
+`
+	root := svc.files.Root()
+	os.MkdirAll(filepath.Join(root, "cheatsheets"), 0755)
+	os.WriteFile(filepath.Join(root, "cheatsheets/git.md"), []byte(initial), 0644)
+
+	err := svc.AppendCheatsheet("cheatsheets/git.md", "Basics", []string{"`git status`", "Show status"})
+	if err != nil {
+		t.Fatalf("AppendCheatsheet: %v", err)
+	}
+
+	content, _ := os.ReadFile(filepath.Join(root, "cheatsheets/git.md"))
+	if !strings.Contains(string(content), "| `git status` | Show status |") {
+		t.Errorf("expected new row in:\n%s", content)
+	}
+	// Original row still present
+	if !strings.Contains(string(content), "| `git init` | Initialize a repo |") {
+		t.Errorf("original row missing in:\n%s", content)
+	}
+}
+
+func TestAppendCheatsheet_NewSection(t *testing.T) {
+	svc := setupService(t)
+
+	initial := `---
+cheatsheet: true
+created: "2026-01-01T00:00:00Z"
+modified: "2026-01-01T00:00:00Z"
+---
+# Git
+
+## Basics
+
+| Command | Description |
+|---------|-------------|
+| ` + "`git init`" + ` | Initialize a repo |
+`
+	root := svc.files.Root()
+	os.MkdirAll(filepath.Join(root, "cheatsheets"), 0755)
+	os.WriteFile(filepath.Join(root, "cheatsheets/git.md"), []byte(initial), 0644)
+
+	err := svc.AppendCheatsheet("cheatsheets/git.md", "Stashing", []string{"`git stash`", "Save changes"})
+	if err != nil {
+		t.Fatalf("AppendCheatsheet: %v", err)
+	}
+
+	content, _ := os.ReadFile(filepath.Join(root, "cheatsheets/git.md"))
+	s := string(content)
+	if !strings.Contains(s, "## Stashing") {
+		t.Errorf("expected new section in:\n%s", s)
+	}
+	if !strings.Contains(s, "| `git stash` | Save changes |") {
+		t.Errorf("expected new row in:\n%s", s)
+	}
+}
+
+func TestAppendCheatsheet_ThreeColumns(t *testing.T) {
+	svc := setupService(t)
+
+	initial := `---
+cheatsheet: true
+created: "2026-01-01T00:00:00Z"
+modified: "2026-01-01T00:00:00Z"
+---
+# Vim
+
+## Movement
+
+| Command | Mode | Description |
+|---------|------|-------------|
+| ` + "`g;`" + ` | Normal | Jump to last edit |
+`
+	root := svc.files.Root()
+	os.MkdirAll(filepath.Join(root, "cheatsheets"), 0755)
+	os.WriteFile(filepath.Join(root, "cheatsheets/vim.md"), []byte(initial), 0644)
+
+	err := svc.AppendCheatsheet("cheatsheets/vim.md", "Movement", []string{"`w`", "Normal", "Next word"})
+	if err != nil {
+		t.Fatalf("AppendCheatsheet: %v", err)
+	}
+
+	content, _ := os.ReadFile(filepath.Join(root, "cheatsheets/vim.md"))
+	if !strings.Contains(string(content), "| `w` | Normal | Next word |") {
+		t.Errorf("expected 3-col row in:\n%s", content)
+	}
+}
+
+func TestAppendCheatsheet_EmptyColumns(t *testing.T) {
+	svc := setupService(t)
+
+	err := svc.AppendCheatsheet("cheatsheets/test.md", "Section", []string{})
+	if err == nil {
+		t.Fatal("expected error for empty columns")
+	}
+}
+
+func TestAppendCheatsheet_EmptySection(t *testing.T) {
+	svc := setupService(t)
+
+	err := svc.AppendCheatsheet("cheatsheets/test.md", "", []string{"a", "b"})
+	if err == nil {
+		t.Fatal("expected error for empty section")
+	}
+}

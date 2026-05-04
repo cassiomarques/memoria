@@ -28,7 +28,7 @@ var version = "dev"
 var knownSubcommands = map[string]bool{
 	"search": true, "list": true, "tags": true, "todos": true,
 	"cat": true, "sync": true, "new": true, "edit": true, "todo": true,
-	"navigate": true, "recent": true, "daily": true, "cheatsheets": true,
+	"navigate": true, "recent": true, "daily": true, "cheatsheets": true, "cheatsheet-add": true,
 	"mcp": true,
 }
 
@@ -109,6 +109,7 @@ Commands:
   edit <path>             Update an existing note (content from stdin)
   todo <title> [opts]     Create a new todo (--folder F, --tags t1,t2, --due YYYY-MM-DD)
   cheatsheets             List notes marked as cheatsheets
+  cheatsheet-add <path> <section> <col>...  Append a row to a cheatsheet table
   mcp                     Start the MCP server (stdio transport)
   help                    Show this help
 
@@ -371,6 +372,19 @@ func buildRequest(command string, args []string) ipc.Request {
 		}
 	case "cheatsheets":
 		// no additional args needed
+	case "cheatsheet-add":
+		// cheatsheet-add <path> <section> <col1> <col2> [col3...]
+		if len(args) >= 1 {
+			req.Args["path"] = args[0]
+		}
+		if len(args) >= 2 {
+			req.Args["section"] = args[1]
+		}
+		if len(args) >= 3 {
+			columns := args[2:]
+			data, _ := json.Marshal(columns)
+			req.Args["columns"] = string(data)
+		}
 	}
 
 	return req

@@ -198,6 +198,8 @@ func (h *Handler) Dispatch(req Request) Response {
 		return h.handleAppendDaily(req)
 	case CmdCheatsheets:
 		return h.handleCheatsheets(req)
+	case CmdCheatsheetAdd:
+		return h.handleCheatsheetAdd(req)
 	default:
 		return ErrResponse(fmt.Sprintf("unknown command: %q", req.Command))
 	}
@@ -388,6 +390,33 @@ func (h *Handler) handleCheatsheets(_ Request) Response {
 		return ErrResponse(err.Error())
 	}
 	return OKResponse(results)
+}
+
+func (h *Handler) handleCheatsheetAdd(req Request) Response {
+	path := req.Args["path"]
+	if path == "" {
+		return ErrResponse("cheatsheet-add requires a 'path' argument")
+	}
+	section := req.Args["section"]
+	if section == "" {
+		return ErrResponse("cheatsheet-add requires a 'section' argument")
+	}
+	columnsRaw := req.Args["columns"]
+	if columnsRaw == "" {
+		return ErrResponse("cheatsheet-add requires a 'columns' argument")
+	}
+
+	// Columns are passed as JSON array
+	var columns []string
+	if err := json.Unmarshal([]byte(columnsRaw), &columns); err != nil {
+		return ErrResponse("invalid columns format (expected JSON array): " + err.Error())
+	}
+
+	if err := h.svc.AppendCheatsheet(path, section, columns); err != nil {
+		return ErrResponse(err.Error())
+	}
+	h.callOnWrite()
+	return OKResponse("appended to cheatsheet")
 }
 
 // validatePath rejects absolute paths and directory traversal attempts.

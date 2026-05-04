@@ -108,6 +108,9 @@ func (f *Frontmatter) Serialize() (string, error) {
 	if f.Archived {
 		data["archived"] = true
 	}
+	if f.Cheatsheet {
+		data["cheatsheet"] = true
+	}
 
 	out, err := yaml.Marshal(data)
 	if err != nil {

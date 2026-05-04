@@ -1270,3 +1270,135 @@ func (s *NoteService) AppendDaily(dailyPath, text string) error {
 	s.requestSync("append daily " + dailyPath)
 	return nil
 }
+
+// AppendCheatsheet appends a row to a table in a cheatsheet note under the given section.
+// If the section has an existing table, a new row is appended matching the column count.
+// If the section exists but has no table, a new table is created.
+// If the section doesn't exist, it's created at the end of the file with a new table.
+func (s *NoteService) AppendCheatsheet(notePath, section string, columns []string) error {
+	if len(columns) == 0 {
+		return fmt.Errorf("at least one column value is required")
+	}
+	if section == "" {
+		return fmt.Errorf("section is required")
+	}
+
+	notePath = ensureMD(notePath)
+	absPath := filepath.Join(s.files.Root(), notePath)
+
+	content, err := os.ReadFile(absPath)
+	if err != nil {
+		return fmt.Errorf("reading cheatsheet: %w", err)
+	}
+
+	lines := strings.Split(string(content), "\n")
+	sectionHeader := "## " + section
+
+	// Find the section
+	sectionIdx := -1
+	for i, line := range lines {
+		if strings.TrimSpace(line) == sectionHeader {
+			sectionIdx = i
+			break
+		}
+	}
+
+	// Build the new row
+	row := "|"
+	for _, col := range columns {
+		row += " " + col + " |"
+	}
+
+	var result []string
+
+	if sectionIdx == -1 {
+		// Section doesn't exist — create it at the end
+		result = append(result, lines...)
+		// Ensure trailing newline before new section
+		if len(result) > 0 && strings.TrimSpace(result[len(result)-1]) != "" {
+			result = append(result, "")
+		}
+		result = append(result, sectionHeader, "")
+		// Create a table with generic headers
+		headerRow := "|"
+		separatorRow := "|"
+		for i := range columns {
+			headerRow += fmt.Sprintf(" Column %d |", i+1)
+			separatorRow += "---|"
+		}
+		result = append(result, headerRow, separatorRow, row, "")
+	} else {
+		// Section exists — find the table or end of section
+		// A valid table has: header row, separator row (|---|), then data rows
+		tableStart := -1
+		tableEnd := -1
+
+		for i := sectionIdx + 1; i < len(lines); i++ {
+			trimmed := strings.TrimSpace(lines[i])
+			// Stop at next section header
+			if strings.HasPrefix(trimmed, "## ") {
+				break
+			}
+			if strings.HasPrefix(trimmed, "|") {
+				if tableStart == -1 {
+					// Verify this is a real table: next line must be separator
+					if i+1 < len(lines) && isTableSeparator(lines[i+1]) {
+						tableStart = i
+						tableEnd = i + 1 // at least header + separator
+					}
+				} else {
+					tableEnd = i
+				}
+			} else if tableStart != -1 {
+				// Non-pipe line after table started — table ends
+				break
+			}
+		}
+
+		if tableStart != -1 {
+			// Table exists — append row after last table line
+			result = append(result, lines[:tableEnd+1]...)
+			result = append(result, row)
+			result = append(result, lines[tableEnd+1:]...)
+		} else {
+			// Section exists but no table — create one after the section header
+			insertIdx := sectionIdx + 1
+			// Skip blank lines after header
+			for insertIdx < len(lines) && strings.TrimSpace(lines[insertIdx]) == "" {
+				insertIdx++
+			}
+			headerRow := "|"
+			separatorRow := "|"
+			for i := range columns {
+				headerRow += fmt.Sprintf(" Column %d |", i+1)
+				separatorRow += "---|"
+			}
+			result = append(result, lines[:insertIdx]...)
+			result = append(result, headerRow, separatorRow, row, "")
+			result = append(result, lines[insertIdx:]...)
+		}
+	}
+
+	output := strings.Join(result, "\n")
+	if err := os.WriteFile(absPath, []byte(output), 0644); err != nil {
+		return fmt.Errorf("writing cheatsheet: %w", err)
+	}
+
+	s.requestSync("append cheatsheet " + notePath)
+	return nil
+}
+
+// isTableSeparator checks if a line is a markdown table separator (e.g., "|---|---|").
+func isTableSeparator(line string) bool {
+	trimmed := strings.TrimSpace(line)
+	if !strings.HasPrefix(trimmed, "|") {
+		return false
+	}
+	// Remove pipes and spaces, check remaining chars are only dashes and colons
+	for _, ch := range trimmed {
+		if ch != '|' && ch != '-' && ch != ':' && ch != ' ' {
+			return false
+		}
+	}
+	return strings.Contains(trimmed, "---")
+}
