@@ -45,9 +45,15 @@ func (h *Handler) SetOnWrite(fn func()) {
 	h.onWrite.Store(fn)
 }
 
+// callOnWrite invokes the write callback in a separate goroutine so that the
+// IPC handler never blocks. This is critical because the callback typically
+// calls tea.Program.Send() which writes to an unbuffered channel — if the
+// bubbletea event loop is paused (e.g. during tea.ExecProcess/vim), a
+// synchronous Send would deadlock the handler goroutine, preventing the IPC
+// response from being written back to the client.
 func (h *Handler) callOnWrite() {
 	if fn, ok := h.onWrite.Load().(func()); ok && fn != nil {
-		fn()
+		go fn()
 	}
 }
 
@@ -59,7 +65,7 @@ func (h *Handler) SetOnNavigate(fn func(string)) {
 
 func (h *Handler) callOnNavigate(path string) {
 	if fn, ok := h.onNavigate.Load().(func(string)); ok && fn != nil {
-		fn(path)
+		go fn(path)
 	}
 }
 

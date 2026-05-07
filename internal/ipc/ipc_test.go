@@ -8,6 +8,7 @@ import (
 	"strings"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/cassiomarques/memoria/internal/ipc"
 	"github.com/cassiomarques/memoria/internal/search"
@@ -449,9 +450,8 @@ func TestOnWriteCallback(t *testing.T) {
 	if !resp.OK {
 		t.Fatalf("expected OK, got error: %s", resp.Error)
 	}
-	if atomic.LoadInt32(&called) != 1 {
-		t.Errorf("expected OnWrite called once, got %d", atomic.LoadInt32(&called))
-	}
+	// The callback runs in a goroutine — wait briefly for it to fire.
+	waitForAtomic(t, &called, 1)
 
 	// new is a write command — should trigger OnWrite again
 	client2 := env.dial(t)
@@ -459,9 +459,21 @@ func TestOnWriteCallback(t *testing.T) {
 		Command: ipc.CmdNew,
 		Args:    map[string]string{"path": "test.md"},
 	})
-	if atomic.LoadInt32(&called) != 2 {
-		t.Errorf("expected OnWrite called twice, got %d", atomic.LoadInt32(&called))
+	waitForAtomic(t, &called, 2)
+}
+
+// waitForAtomic polls until the atomic int32 reaches the expected value, or
+// fails after a timeout. Used for callbacks that run in goroutines.
+func waitForAtomic(t *testing.T, val *int32, expected int32) {
+	t.Helper()
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		if atomic.LoadInt32(val) == expected {
+			return
+		}
+		time.Sleep(5 * time.Millisecond)
 	}
+	t.Errorf("timed out waiting for atomic value %d, got %d", expected, atomic.LoadInt32(val))
 }
 
 func TestClientMultipleRequests(t *testing.T) {
@@ -571,5 +583,66 @@ func TestRoundTrip_Edit_Nonexistent(t *testing.T) {
 	}
 	if resp.OK {
 		t.Fatal("expected error when editing nonexistent note")
+	}
+}
+
+// TestOnWriteCallback_NonBlocking verifies that a blocking OnWrite callback
+// does NOT prevent the IPC handler from returning a response to the client.
+//
+// This reproduces a deadlock that occurred when the TUI had vim open (via
+// tea.ExecProcess): the bubbletea event loop was paused so p.Send() would
+// block on its unbuffered channel. If callOnWrite() ran the callback
+// synchronously, the handler goroutine would block forever, the client would
+// never receive a response, and the MCP subprocess would be killed by its
+// context timeout ("signal: killed").
+func TestOnWriteCallback_NonBlocking(t *testing.T) {
+	env := setupTestEnv(t)
+
+	// Create a note so the edit command succeeds.
+	_, err := env.svc.Create("blocking-test.md", "original content", nil)
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+
+	// Simulate a blocking callback (like p.Send() on a paused bubbletea program).
+	blockForever := make(chan struct{})
+	t.Cleanup(func() { close(blockForever) })
+
+	handler := ipc.NewHandler(env.svc)
+	handler.SetOnWrite(func() {
+		<-blockForever // blocks until test cleanup
+	})
+
+	srv, err := ipc.NewServer(env.sockPath, handler)
+	if err != nil {
+		t.Fatalf("NewServer: %v", err)
+	}
+	t.Cleanup(func() { srv.Close() })
+
+	client := env.dial(t)
+
+	// The edit request must complete promptly even though the callback blocks.
+	done := make(chan struct{})
+	go func() {
+		resp, err := client.Send(ipc.Request{
+			Command: ipc.CmdEdit,
+			Args: map[string]string{
+				"path":    "blocking-test.md",
+				"content": "updated via IPC while vim is open",
+			},
+		})
+		if err != nil {
+			t.Errorf("Send: %v", err)
+		} else if !resp.OK {
+			t.Errorf("expected OK, got error: %s", resp.Error)
+		}
+		close(done)
+	}()
+
+	select {
+	case <-done:
+		// Success — handler returned without blocking.
+	case <-time.After(5 * time.Second):
+		t.Fatal("IPC edit request deadlocked: callOnWrite blocked the handler (regression)")
 	}
 }

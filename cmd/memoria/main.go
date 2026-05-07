@@ -222,8 +222,9 @@ func runTUI(homeDir string) error {
 	p := tea.NewProgram(app)
 
 	// Wire IPC write callback to inject a refresh message into the TUI.
-	// tea.Program.Send() is goroutine-safe — it's designed for exactly this
-	// kind of external event injection into the Elm Architecture update loop.
+	// The handler invokes callbacks in a goroutine, so p.Send() won't
+	// deadlock even when the event loop is paused (e.g. vim open via
+	// tea.ExecProcess).
 	if ipcServer != nil {
 		ipcServer.Handler().SetOnWrite(func() {
 			p.Send(tui.ExternalRefreshMsg{})
