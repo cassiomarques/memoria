@@ -45,9 +45,8 @@ func TestUpsertNote_InsertThenUpdate(t *testing.T) {
 		t.Errorf("title = %q, want %q", got.Title, "hello")
 	}
 
-	// Update: change modified time
-	time.Sleep(10 * time.Millisecond)
-	n.Modified = time.Now()
+	// Update: change modified time to a clearly later value
+	n.Modified = n.Modified.Add(2 * time.Second)
 	n.Title = "updated"
 	if err := store.UpsertNote(n); err != nil {
 		t.Fatalf("UpsertNote (update): %v", err)

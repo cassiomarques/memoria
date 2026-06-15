@@ -182,7 +182,7 @@ func (m *MetaStore) UpsertNote(n *note.Note) error {
 			completed  = excluded.completed,
 			archived   = excluded.archived,
 			cheatsheet = excluded.cheatsheet`,
-		n.Path, n.Title, n.Folder, n.Created, n.Modified, n.Todo, n.Done, n.Due, n.Completed, n.Archived, n.Cheatsheet,
+		n.Path, n.Title, n.Folder, n.Created.Format(time.RFC3339), n.Modified.Format(time.RFC3339), n.Todo, n.Done, formatTimePtr(n.Due), formatTimePtr(n.Completed), n.Archived, n.Cheatsheet,
 	)
 	if err != nil {
 		return err
@@ -236,14 +236,26 @@ func (m *MetaStore) MoveNote(oldPath, newPath string, newFolder string) error {
 // GetNote retrieves note metadata by path. Returns ErrNoteNotFound when the path does not exist.
 func (m *MetaStore) GetNote(path string) (*NoteMeta, error) {
 	nm := &NoteMeta{}
+	var createdStr, modifiedStr string
+	var dueStr, completedStr sql.NullString
 	err := m.db.QueryRow(
 		`SELECT path, title, folder, created, modified, todo, done, due, completed, archived, cheatsheet FROM notes WHERE path = ?`, path,
-	).Scan(&nm.Path, &nm.Title, &nm.Folder, &nm.Created, &nm.Modified, &nm.Todo, &nm.Done, &nm.Due, &nm.Completed, &nm.Archived, &nm.Cheatsheet)
+	).Scan(&nm.Path, &nm.Title, &nm.Folder, &createdStr, &modifiedStr, &nm.Todo, &nm.Done, &dueStr, &completedStr, &nm.Archived, &nm.Cheatsheet)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrNoteNotFound
 	}
 	if err != nil {
 		return nil, err
+	}
+	nm.Created, _ = time.Parse(time.RFC3339, createdStr)
+	nm.Modified, _ = time.Parse(time.RFC3339, modifiedStr)
+	if dueStr.Valid && dueStr.String != "" {
+		t, _ := time.Parse(time.RFC3339, dueStr.String)
+		nm.Due = &t
+	}
+	if completedStr.Valid && completedStr.String != "" {
+		t, _ := time.Parse(time.RFC3339, completedStr.String)
+		nm.Completed = &t
 	}
 
 	tags, err := m.GetTags(path)
@@ -394,8 +406,20 @@ func (m *MetaStore) scanNotesWithTags(rows *sql.Rows) ([]*NoteMeta, error) {
 	var notes []*NoteMeta
 	for rows.Next() {
 		nm := &NoteMeta{}
-		if err := rows.Scan(&nm.Path, &nm.Title, &nm.Folder, &nm.Created, &nm.Modified, &nm.Todo, &nm.Done, &nm.Due, &nm.Completed, &nm.Archived, &nm.Cheatsheet); err != nil {
+		var createdStr, modifiedStr string
+		var dueStr, completedStr sql.NullString
+		if err := rows.Scan(&nm.Path, &nm.Title, &nm.Folder, &createdStr, &modifiedStr, &nm.Todo, &nm.Done, &dueStr, &completedStr, &nm.Archived, &nm.Cheatsheet); err != nil {
 			return nil, err
+		}
+		nm.Created, _ = time.Parse(time.RFC3339, createdStr)
+		nm.Modified, _ = time.Parse(time.RFC3339, modifiedStr)
+		if dueStr.Valid && dueStr.String != "" {
+			t, _ := time.Parse(time.RFC3339, dueStr.String)
+			nm.Due = &t
+		}
+		if completedStr.Valid && completedStr.String != "" {
+			t, _ := time.Parse(time.RFC3339, completedStr.String)
+			nm.Completed = &t
 		}
 		notes = append(notes, nm)
 	}
@@ -472,4 +496,12 @@ func (m *MetaStore) ListCheatsheets() ([]*NoteMeta, error) {
 	}
 	defer rows.Close()
 	return m.scanNotesWithTags(rows)
+}
+
+// formatTimePtr formats a *time.Time as RFC3339, or returns nil if the pointer is nil.
+func formatTimePtr(t *time.Time) interface{} {
+	if t == nil {
+		return nil
+	}
+	return t.Format(time.RFC3339)
 }

@@ -1168,12 +1168,13 @@ func TestListPinned(t *testing.T) {
 func TestListRecent(t *testing.T) {
 	svc := setupService(t)
 
-	for _, name := range []string{"first.md", "second.md", "third.md"} {
+	names := []string{"first.md", "second.md", "third.md"}
+	for _, name := range names {
 		if _, err := svc.Create(name, "", nil); err != nil {
 			t.Fatal(err)
 		}
-		// Small delay so modified times differ
-		time.Sleep(50 * time.Millisecond)
+		// RFC3339 has second precision, so we need at least 1s between creates
+		time.Sleep(1 * time.Second)
 	}
 
 	recent, err := svc.ListRecent(2)
