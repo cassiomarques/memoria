@@ -646,3 +646,60 @@ func TestOnWriteCallback_NonBlocking(t *testing.T) {
 		t.Fatal("IPC edit request deadlocked: callOnWrite blocked the handler (regression)")
 	}
 }
+
+func TestEdit_RejectsWhenNoteOpenInEditor(t *testing.T) {
+	env := setupTestEnv(t)
+
+	// Create a note
+	_, err := env.svc.Create("open-in-vim.md", "original content", nil)
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+
+	handler := ipc.NewHandler(env.svc)
+	// Simulate the note being open in the editor
+	handler.SetEditingPath("open-in-vim.md")
+
+	srv, err := ipc.NewServer(env.sockPath, handler)
+	if err != nil {
+		t.Fatalf("NewServer: %v", err)
+	}
+	t.Cleanup(func() { srv.Close() })
+
+	client := env.dial(t)
+
+	// Edit should be rejected
+	resp, err := client.Send(ipc.Request{
+		Command: ipc.CmdEdit,
+		Args: map[string]string{
+			"path":    "open-in-vim.md",
+			"content": "this should be rejected",
+		},
+	})
+	if err != nil {
+		t.Fatalf("Send: %v", err)
+	}
+	if resp.OK {
+		t.Fatal("expected error when editing a note open in the editor")
+	}
+	if !strings.Contains(resp.Error, "currently open in the editor") {
+		t.Errorf("unexpected error message: %s", resp.Error)
+	}
+
+	// After clearing editing state, edit should succeed
+	handler.SetEditingPath("")
+
+	resp, err = client.Send(ipc.Request{
+		Command: ipc.CmdEdit,
+		Args: map[string]string{
+			"path":    "open-in-vim.md",
+			"content": "this should succeed",
+		},
+	})
+	if err != nil {
+		t.Fatalf("Send after clear: %v", err)
+	}
+	if !resp.OK {
+		t.Fatalf("expected OK after editor closed, got error: %s", resp.Error)
+	}
+}

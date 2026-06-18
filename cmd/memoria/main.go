@@ -217,6 +217,11 @@ func runTUI(homeDir string) error {
 		ShowTimestamps:    cfg.ResolveShowTimestamps(),
 		Version:           version,
 		DefaultTodoFolder: cfg.ResolveDefaultTodoFolder(),
+		OnEditorState: func(path string) {
+			if ipcServer != nil {
+				ipcServer.Handler().SetEditingPath(path)
+			}
+		},
 	})
 
 	p := tea.NewProgram(app)

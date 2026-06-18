@@ -21,15 +21,32 @@ import (
 // Handler dispatches IPC requests to a NoteService. It is used by both the
 // socket Server (Mode A) and the direct CLI execution path (Mode B).
 type Handler struct {
-	svc        *service.NoteService
-	dailyFile  string       // relative path to daily log file
-	onWrite    atomic.Value // stores func()
-	onNavigate atomic.Value // stores func(string)
+	svc         *service.NoteService
+	dailyFile   string       // relative path to daily log file
+	onWrite     atomic.Value // stores func()
+	onNavigate  atomic.Value // stores func(string)
+	editingMu   sync.RWMutex
+	editingPath string // note currently open in the editor (empty if none)
 }
 
 // NewHandler creates a handler that dispatches to the given NoteService.
 func NewHandler(svc *service.NoteService) *Handler {
 	return &Handler{svc: svc, dailyFile: "daily.md"}
+}
+
+// SetEditingPath records which note is currently open in the editor.
+// Pass empty string when the editor closes.
+func (h *Handler) SetEditingPath(path string) {
+	h.editingMu.Lock()
+	h.editingPath = path
+	h.editingMu.Unlock()
+}
+
+// EditingPath returns the note currently open in the editor, or empty.
+func (h *Handler) EditingPath() string {
+	h.editingMu.RLock()
+	defer h.editingMu.RUnlock()
+	return h.editingPath
 }
 
 // SetDailyFile configures the relative path to the daily log file.
@@ -319,6 +336,13 @@ func (h *Handler) handleEdit(req Request) Response {
 	if err := validatePath(path); err != nil {
 		return ErrResponse("edit: " + err.Error())
 	}
+
+	// Refuse to edit a note that's currently open in the editor to avoid
+	// data loss and crashes from concurrent file writes.
+	if editing := h.EditingPath(); editing != "" && editing == path {
+		return ErrResponse("note is currently open in the editor — close it first")
+	}
+
 	content := req.Args["content"]
 	n, err := h.svc.Edit(path, content)
 	if err != nil {

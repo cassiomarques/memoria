@@ -137,6 +137,7 @@ type App struct {
 	version           string
 	defaultTodoFolder string
 	headerCache       string // rendered header, updated on resize
+	onEditorState     func(path string)
 }
 
 // NewApp creates a new App with all sub-components initialized (no service).
@@ -159,6 +160,8 @@ type AppOptions struct {
 	ShowTimestamps    bool
 	Version           string
 	DefaultTodoFolder string
+	// OnEditorState is called when the editor opens (path) or closes ("").
+	OnEditorState func(path string)
 }
 
 // NewAppWithService creates an App wired to the NoteService, loading initial data.
@@ -180,6 +183,7 @@ func NewAppWithService(svc *service.NoteService, opts AppOptions) App {
 		clipboard:         systemClipboard{},
 		version:           opts.Version,
 		defaultTodoFolder: opts.DefaultTodoFolder,
+		onEditorState:     opts.OnEditorState,
 	}
 
 	_ = a.refreshNoteList()
@@ -208,6 +212,9 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return a, nil
 
 	case editorFinishedMsg:
+		if a.onEditorState != nil {
+			a.onEditorState("")
+		}
 		if msg.err != nil {
 			a.setMessage("Editor error: "+msg.err.Error(), true)
 		} else if a.svc != nil {
@@ -2082,6 +2089,9 @@ func (a *App) openInEditor(notePath string, lineNum int) tea.Cmd {
 	c := exec.Command(parts[0], args...)
 
 	path := notePath
+	if a.onEditorState != nil {
+		a.onEditorState(path)
+	}
 	return tea.ExecProcess(c, func(err error) tea.Msg {
 		if useSocket {
 			_ = os.Remove(memoriaEditorSocket)
