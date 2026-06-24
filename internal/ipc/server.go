@@ -337,12 +337,6 @@ func (h *Handler) handleEdit(req Request) Response {
 		return ErrResponse("edit: " + err.Error())
 	}
 
-	// Refuse to edit a note that's currently open in the editor to avoid
-	// data loss and crashes from concurrent file writes.
-	if editing := h.EditingPath(); editing != "" && editing == path {
-		return ErrResponse("note is currently open in the editor — close it first")
-	}
-
 	content := req.Args["content"]
 	n, err := h.svc.Edit(path, content)
 	if err != nil {

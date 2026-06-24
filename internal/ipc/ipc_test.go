@@ -647,7 +647,7 @@ func TestOnWriteCallback_NonBlocking(t *testing.T) {
 	}
 }
 
-func TestEdit_RejectsWhenNoteOpenInEditor(t *testing.T) {
+func TestEdit_SucceedsWhenNoteOpenInEditor(t *testing.T) {
 	env := setupTestEnv(t)
 
 	// Create a note
@@ -668,38 +668,18 @@ func TestEdit_RejectsWhenNoteOpenInEditor(t *testing.T) {
 
 	client := env.dial(t)
 
-	// Edit should be rejected
+	// Edit should succeed even when the note is open in the editor
 	resp, err := client.Send(ipc.Request{
 		Command: ipc.CmdEdit,
 		Args: map[string]string{
 			"path":    "open-in-vim.md",
-			"content": "this should be rejected",
+			"content": "edited while open in editor",
 		},
 	})
 	if err != nil {
 		t.Fatalf("Send: %v", err)
 	}
-	if resp.OK {
-		t.Fatal("expected error when editing a note open in the editor")
-	}
-	if !strings.Contains(resp.Error, "currently open in the editor") {
-		t.Errorf("unexpected error message: %s", resp.Error)
-	}
-
-	// After clearing editing state, edit should succeed
-	handler.SetEditingPath("")
-
-	resp, err = client.Send(ipc.Request{
-		Command: ipc.CmdEdit,
-		Args: map[string]string{
-			"path":    "open-in-vim.md",
-			"content": "this should succeed",
-		},
-	})
-	if err != nil {
-		t.Fatalf("Send after clear: %v", err)
-	}
 	if !resp.OK {
-		t.Fatalf("expected OK after editor closed, got error: %s", resp.Error)
+		t.Fatalf("expected OK, got error: %s", resp.Error)
 	}
 }
